@@ -180,7 +180,7 @@ class Hud:
         on_release(label, 1, lambda agent=row.agent: self.on_click(agent))
         if dismissible:
             # Packed before the label so a long label cannot push it out.
-            close = tk.Label(line, text="✕", bg=ROW_BG, fg=FG, padx=6, pady=4, cursor="hand2")
+            close = tk.Label(line, text="×", bg=ROW_BG, fg=FG, padx=6, pady=4, cursor="hand2")
             close.pack(side=tk.RIGHT)
             close.bind("<Enter>", lambda _e: close.configure(bg=ROW_ACTIVE_BG, fg=BG))
             close.bind("<Leave>", lambda _e: close.configure(bg=ROW_BG, fg=FG))

@@ -68,13 +68,13 @@ class HudGuiTests(unittest.TestCase):
         texts = [text for text, _ in self.labels()]
         self.assertEqual(
             texts,
-            ["Blocked", "▶ blocked row", "Done · NEEDS_USER", "▶ row a", "✕", "Done",
-             "▶ row b", "✕"],
+            ["Blocked", "▶ blocked row", "Done · NEEDS_USER", "▶ row a", "×", "Done",
+             "▶ row b", "×"],
         )
         widgets = [widget for _, widget in self.labels()]
         self.before = ([], [])
         self.press(widgets[3], 1, release_at=(-5, 2))     # released outside: nothing
-        self.press(widgets[4], 1)       # ✕ of row a
+        self.press(widgets[4], 1)       # × of row a
         self.press(widgets[6], 3)       # right click on row b
         self.press(widgets[3], 1)       # left click on row a focuses it
         self.press(widgets[1], 3)       # right click on a blocked row does nothing

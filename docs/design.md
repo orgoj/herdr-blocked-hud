@@ -223,7 +223,7 @@ that stay `done` (finished, not yet seen) longer than a threshold.
   `done.sound_enabled` (default `true`) and file `done.sound`, default a
   quieter sound than blocked. Turning it off leaves the blocked sound
   untouched.
-- Click: same as blocked (focus pane, raise window). `✕` or a right click
+- Click: same as blocked (focus pane, raise window). `×` or a right click
   dismisses the row for that completion.
 
 Status value and mode (user requirement: `DONE` replies are usually fine once

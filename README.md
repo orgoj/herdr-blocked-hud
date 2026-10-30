@@ -18,7 +18,7 @@ you:
   value set to `sticky` stays until the agent works again. A separate,
   switchable sound plays.
 
-Click a row to focus that pane in Herdr and raise its terminal window; `✕`
+Click a row to focus that pane in Herdr and raise its terminal window; `×`
 or a right click dismisses a done row. The
 window disappears when nothing is listed. A blocked pane stays listed until
 it is no longer blocked, even while it is on screen in Herdr. If Herdr
@@ -97,7 +97,7 @@ value's mode decides how long the row stays:
   finishes anew; a pane viewed before `done.after_seconds` is still listed.
 - `hide`: never listed.
 
-The `✕` button or a right click dismisses a done row for that completion.
+The `×` button or a right click dismisses a done row for that completion.
 Example: forget `DONE` replies once seen, keep every other one listed:
 
 ```toml
