@@ -22,6 +22,36 @@ class ClientTests(unittest.TestCase):
         self.assertFalse(x11.is_ui_client(("wezterm-gui", "--class", "herdr")))
         self.assertFalse(x11.is_ui_client(()))
 
+    def test_global_option_cli_commands_are_not_ui_clients(self):
+        not_clients = [
+            ("herdr", "--session", "work", "agent", "read", "w1:p1"),
+            ("herdr", "--session=work", "agent", "focus", "w1:p1"),
+            ("herdr", "--machine", "build", "pane", "list"),
+            ("herdr", "--session"),
+            ("herdr", "session", "list", "--json"),
+        ]
+        for argv in not_clients:
+            with self.subTest(argv=argv):
+                self.assertIsNone(x11.parse_client_args(argv))
+
+    def test_ui_client_forms(self):
+        parse = x11.parse_client_args
+        self.assertEqual(parse(("herdr",)), x11.ClientArgs(None, False))
+        self.assertEqual(parse(("herdr", "--session", "work")), x11.ClientArgs("work", False))
+        self.assertEqual(parse(("herdr", "session", "attach", "work")), x11.ClientArgs("work", False))
+        self.assertEqual(
+            parse(("herdr", "--remote", "host", "--remote-keybindings", "server")),
+            x11.ClientArgs(None, True),
+        )
+
+    def test_attach_and_remote_sessions(self):
+        def session(argv):
+            return x11.client_session(Process(1, argv, {}), SESSIONS)
+
+        self.assertEqual(session(("herdr", "session", "attach", "work")), "work")
+        # A remote client shows a remote server, never a local session.
+        self.assertIsNone(session(("herdr", "--remote", "host")))
+
     def test_client_session(self):
         def session(argv, env=None):
             return x11.client_session(Process(1, argv, env or {}), SESSIONS)

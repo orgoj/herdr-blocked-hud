@@ -21,24 +21,61 @@ class Process:
     environ: dict[str, str]
 
 
-def is_ui_client(argv: tuple[str, ...]) -> bool:
-    """`herdr` or `herdr --session x`, not `herdr server` or CLI subcommands."""
+# Herdr global options that take a value (`herdr --help`).
+VALUE_OPTIONS = ("--session", "--machine", "--remote", "--remote-keybindings")
+
+
+@dataclass(frozen=True)
+class ClientArgs:
+    session: str | None
+    remote: bool
+
+
+def parse_client_args(argv: tuple[str, ...]) -> ClientArgs | None:
+    """Arguments of a local Herdr UI client, or None for anything else.
+
+    UI clients are `herdr [options]` and `herdr session attach <name>`;
+    `herdr server`, `herdr --session x agent focus …` and other CLI commands
+    are not.
+    """
     if not argv or os.path.basename(argv[0]) != "herdr":
-        return False
-    return len(argv) == 1 or argv[1].startswith("-")
+        return None
+    options: dict[str, str] = {}
+    positional: list[str] = []
+    args = list(argv[1:])
+    while args:
+        arg = args.pop(0)
+        name, has_value, value = arg.partition("=")
+        if name in VALUE_OPTIONS:
+            if not has_value:
+                if not args:
+                    return None
+                value = args.pop(0)
+            options[name] = value
+        elif arg.startswith("-"):
+            continue
+        else:
+            positional.append(arg)
+    if positional[:2] == ["session", "attach"] and len(positional) == 3:
+        return ClientArgs(session=positional[2], remote=False)
+    if positional or "--machine" in options:
+        return None
+    return ClientArgs(session=options.get("--session"), remote="--remote" in options)
+
+
+def is_ui_client(argv: tuple[str, ...]) -> bool:
+    return parse_client_args(argv) is not None
 
 
 def client_session(process: Process, sessions: Iterable[Session]) -> str | None:
-    """Name of the session a UI client is attached to, if it is a known one."""
+    """Name of the local session a UI client is attached to, if it is known."""
+    args = parse_client_args(process.argv)
+    if args is None or args.remote:
+        return None
     sessions = list(sessions)
     names = {s.name for s in sessions}
-    argv = process.argv
-    for i, arg in enumerate(argv):
-        if arg == "--session" and i + 1 < len(argv):
-            return argv[i + 1] if argv[i + 1] in names else None
-        if arg.startswith("--session="):
-            name = arg.split("=", 1)[1]
-            return name if name in names else None
+    if args.session is not None:
+        return args.session if args.session in names else None
     socket_path = process.environ.get("HERDR_SOCKET_PATH")
     if socket_path:
         for s in sessions:
@@ -169,7 +206,9 @@ def host_window(
 ) -> Window | None:
     """First window owning a client's nearest ancestor; else exact WM_CLASS.
 
-    Window titles are never matched: a browser tab titled "herdr" is not the
+    The WM_CLASS fallback cannot tell sessions apart, so callers pass it only
+    when every local UI client belongs to the requested session. Window
+    titles are never matched: a browser tab titled "herdr" is not the
     terminal.
     """
     by_pid: dict[int, Window] = {}

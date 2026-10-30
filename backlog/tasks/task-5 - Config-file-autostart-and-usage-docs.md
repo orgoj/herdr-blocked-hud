@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@herdr_dev'
 created_date: '2026-10-30 10:30'
-updated_date: '2026-10-30 11:25'
+updated_date: '2026-10-30 11:31'
 labels: []
 dependencies:
   - TASK-2
@@ -31,6 +31,8 @@ Configuration, desktop autostart and a README for the prototype. See docs/design
 
 <!-- SECTION:NOTES:BEGIN -->
 AC2 narrowed to what is verifiable before installation: the user wants a review and the bin agent to own installation into ~/.local/bin and ~/.config/autostart, so no login test was run. Evidence: desktop-file-validate rc 0; lxqt-session PATH contains /home/michael/.local/bin; launcher works through a symlink from another cwd (--check-config rc 0); unknown arguments exit 2. Nothing was installed.
+
+Review fix (agent_review): config rejects non-positive width and done.after_seconds and negative margins; README and contrib/config.toml document the limits and the session-safe wm_class fallback.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import traceback
 from typing import Callable
 
 from . import config as config_module
@@ -227,7 +228,18 @@ def main(argv: list[str]) -> int:
 
         def on_model(model: Model) -> None:
             sessions[:] = [state.session for state in model.sessions]
-            hud.submit(model, viewed_for(model), tracker.update(model))
+            # Extras fail soft: the blocked rows must still reach the window.
+            try:
+                viewed = viewed_for(model)
+            except Exception:
+                traceback.print_exc()
+                viewed = set()
+            try:
+                long_done = tracker.update(model)
+            except Exception:
+                traceback.print_exc()
+                long_done = ()
+            hud.submit(model, viewed, long_done)
 
         poller = Poller(on_model, interval=config.poll_interval)
 

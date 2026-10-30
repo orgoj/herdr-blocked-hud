@@ -5,7 +5,8 @@
 poll_interval = 1.0
 
 # Exact `wmctrl -lx` class of the Herdr terminal window, used when the
-# process tree finds no window (e.g. a terminal mux). "" disables it.
+# process tree finds no window (e.g. a terminal mux) and no other session
+# has a client, since a class cannot tell sessions apart. "" disables it.
 wm_class = "herdr.herdr"
 
 # Sound files played with paplay; "" disables that sound.

@@ -12,10 +12,14 @@ import socket
 import subprocess
 import threading
 import time
+import traceback
 from dataclasses import dataclass
 from typing import Callable
 
 SOCKET_TIMEOUT_S = 1.0
+REQUEST_DEADLINE_S = 3.0
+# A snapshot of a dozen agents is ~20 KB; this leaves ample room.
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 SESSION_LIST_TIMEOUT_S = 2.0
 POLL_INTERVAL_S = 1.0
 SESSION_REFRESH_S = 10.0
@@ -79,6 +83,17 @@ class Model:
         return errors
 
 
+# Errors a schema-incompatible but valid JSON payload raises while parsed.
+PAYLOAD_ERRORS = (KeyError, TypeError, AttributeError, ValueError)
+
+
+def _str(record: dict, key: str) -> str:
+    value = record[key]
+    if not isinstance(value, str):
+        raise TypeError(f"{key} is not a string")
+    return value
+
+
 def parse_session_list(payload: dict) -> list[Session]:
     """Running sessions from `herdr session list --json` output."""
     sessions = []
@@ -87,8 +102,8 @@ def parse_session_list(payload: dict) -> list[Session]:
             continue
         sessions.append(
             Session(
-                name=entry["name"],
-                socket_path=entry["socket_path"],
+                name=_str(entry, "name"),
+                socket_path=_str(entry, "socket_path"),
                 default=bool(entry.get("default")),
             )
         )
@@ -111,27 +126,40 @@ def list_sessions() -> list[Session]:
         )
     try:
         return parse_session_list(json.loads(result.stdout))
-    except (ValueError, KeyError, TypeError) as err:
-        raise SourceError(f"herdr session list: bad output: {err}") from err
+    except PAYLOAD_ERRORS as err:
+        raise SourceError(f"herdr session list: bad output: {err!r}") from err
 
 
-def request(socket_path: str, method: str, params: dict | None = None) -> dict:
-    """Send one request line to a Herdr socket and return its `result`."""
+def request(
+    socket_path: str,
+    method: str,
+    params: dict | None = None,
+    deadline_s: float = REQUEST_DEADLINE_S,
+    max_bytes: int = MAX_RESPONSE_BYTES,
+) -> dict:
+    """Send one request line to a Herdr socket and return its `result`.
+
+    The whole exchange must finish within `deadline_s` and the reply must fit
+    in `max_bytes`, so a misbehaving peer cannot stall the poll thread.
+    """
     line = json.dumps({"id": "hud", "method": method, "params": params or {}})
+    deadline = time.monotonic() + deadline_s
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-            conn.settimeout(SOCKET_TIMEOUT_S)
+            conn.settimeout(min(SOCKET_TIMEOUT_S, deadline_s))
             conn.connect(socket_path)
             conn.sendall(line.encode() + b"\n")
-            response = _read_line(conn)
+            response = _read_line(conn, deadline, max_bytes)
     except OSError as err:
         raise SourceError(f"{method}: {err}") from err
     try:
         message = json.loads(response)
     except ValueError as err:
         raise SourceError(f"{method}: bad response: {err}") from err
+    if not isinstance(message, dict):
+        raise SourceError(f"{method}: response is not an object")
     if "error" in message:
-        error = message["error"] or {}
+        error = message["error"] if isinstance(message["error"], dict) else {}
         raise SourceError(
             f"{method}: {error.get('code', 'error')}: {error.get('message', '')}".rstrip(": ")
         )
@@ -140,52 +168,74 @@ def request(socket_path: str, method: str, params: dict | None = None) -> dict:
     return message["result"]
 
 
-def _read_line(conn: socket.socket) -> bytes:
+def _read_line(conn: socket.socket, deadline: float, max_bytes: int) -> bytes:
     chunks = []
+    size = 0
     while True:
-        chunk = conn.recv(65536)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise OSError("response deadline exceeded")
+        conn.settimeout(min(SOCKET_TIMEOUT_S, remaining))
+        try:
+            chunk = conn.recv(65536)
+        except TimeoutError:
+            if time.monotonic() >= deadline:
+                raise OSError("response deadline exceeded") from None
+            raise
         if not chunk:
             raise OSError("connection closed before a full response")
         newline = chunk.find(b"\n")
         if newline >= 0:
-            chunks.append(chunk[:newline])
-            return b"".join(chunks)
+            chunk = chunk[:newline]
+        size += len(chunk)
+        if size > max_bytes:
+            raise OSError(f"response larger than {max_bytes} bytes")
         chunks.append(chunk)
+        if newline >= 0:
+            return b"".join(chunks)
 
 
 def parse_snapshot(session: Session, result: dict) -> tuple[Agent, ...]:
     """Agents with human labels from a `session.snapshot` result."""
     snapshot = result["snapshot"]
-    workspaces = {ws["workspace_id"]: ws for ws in snapshot.get("workspaces", [])}
-    tabs = {tab["tab_id"]: tab for tab in snapshot.get("tabs", [])}
+    workspaces = {_str(ws, "workspace_id"): ws for ws in snapshot.get("workspaces", [])}
+    tabs = {_str(tab, "tab_id"): tab for tab in snapshot.get("tabs", [])}
     agents = []
     for entry in snapshot.get("agents", []):
-        workspace = workspaces.get(entry["workspace_id"], {})
-        tab = tabs.get(entry["tab_id"], {})
+        workspace_id = _str(entry, "workspace_id")
+        tab_id = _str(entry, "tab_id")
+        completion_seq = entry.get("completion_seq")
+        if completion_seq is not None and not isinstance(completion_seq, int):
+            raise TypeError("completion_seq is not an integer")
         agents.append(
             Agent(
                 session=session.name,
-                pane_id=entry["pane_id"],
-                terminal_id=entry["terminal_id"],
-                workspace_id=entry["workspace_id"],
-                tab_id=entry["tab_id"],
-                workspace_label=_label(workspace, entry["workspace_id"]),
-                tab_label=_label(tab, entry["tab_id"]),
-                agent_label=entry.get("display_agent")
-                or entry.get("name")
-                or entry.get("agent")
+                pane_id=_str(entry, "pane_id"),
+                terminal_id=_str(entry, "terminal_id"),
+                workspace_id=workspace_id,
+                tab_id=tab_id,
+                workspace_label=_label(workspaces.get(workspace_id, {}), workspace_id),
+                tab_label=_label(tabs.get(tab_id, {}), tab_id),
+                agent_label=_text(entry.get("display_agent"))
+                or _text(entry.get("name"))
+                or _text(entry.get("agent"))
                 or "agent",
-                status=entry["agent_status"],
+                status=_str(entry, "agent_status"),
                 focused=bool(entry.get("focused")),
-                completion_seq=entry.get("completion_seq"),
+                completion_seq=completion_seq,
             )
         )
     return tuple(agents)
 
 
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 def _label(record: dict, fallback: str) -> str:
-    if record.get("label"):
-        return record["label"]
+    label = _text(record.get("label"))
+    if label:
+        return label
     if record.get("number") is not None:
         return str(record["number"])
     return fallback
@@ -197,8 +247,8 @@ def read_session(session: Session) -> SessionState:
         return SessionState(session, agents=parse_snapshot(session, result))
     except SourceError as err:
         return SessionState(session, error=str(err))
-    except (KeyError, TypeError) as err:
-        return SessionState(session, error=f"session.snapshot: bad payload: {err}")
+    except PAYLOAD_ERRORS as err:
+        return SessionState(session, error=f"session.snapshot: bad payload: {err!r}")
 
 
 def read_agent_tail(agent: Agent, lines: int) -> str | None:
@@ -276,6 +326,16 @@ class Poller:
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            self._on_model(self.poll_once())
+            # A bug or unexpected payload must not end polling and freeze the
+            # HUD on stale rows: report it as an error state and keep going.
+            try:
+                model = self.poll_once()
+            except Exception as err:
+                traceback.print_exc()
+                model = Model(error=f"internal error: {err!r}")
+            try:
+                self._on_model(model)
+            except Exception:
+                traceback.print_exc()
             self._wake.wait(self._interval)
             self._wake.clear()

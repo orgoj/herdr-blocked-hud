@@ -4,7 +4,9 @@ import shutil
 import socket
 import tempfile
 import threading
+import time
 import unittest
+from unittest import mock
 
 from herdr_blocked_hud import source
 from herdr_blocked_hud.source import Model, Poller, Session, SessionState, SourceError
@@ -21,7 +23,8 @@ def fixture(name):
 class FakeHerdr:
     """One-shot Unix socket server answering each connection with `reply`."""
 
-    def __init__(self, reply: bytes | None):
+    def __init__(self, reply: bytes | None, trickle: bool = False):
+        self.trickle = trickle
         (ROOT / "tmp").mkdir(exist_ok=True)
         self.dir = tempfile.mkdtemp(dir=ROOT / "tmp")
         self.path = str(pathlib.Path(self.dir) / "herdr.sock")
@@ -40,7 +43,15 @@ class FakeHerdr:
             while not data.endswith(b"\n"):
                 data += conn.recv(4096)
             self.requests.append(json.loads(data))
-            if self.reply is not None:
+            if self.trickle:
+                # One byte at a time, never a newline, until the client gives up.
+                try:
+                    for _ in range(200):
+                        conn.sendall(b"x")
+                        time.sleep(0.01)
+                except OSError:
+                    pass
+            elif self.reply is not None:
                 # Split the reply to exercise reads across several recv calls.
                 for start in range(0, len(self.reply), 1000):
                     conn.sendall(self.reply[start : start + 1000])
@@ -137,6 +148,55 @@ class RequestTests(unittest.TestCase):
         state = source.read_session(Session("default", server.path, True))
         self.assertIn("bad payload", state.error)
 
+    def test_schema_incompatible_snapshots_are_error_states(self):
+        replies = [
+            {"snapshot": []},
+            {"snapshot": {"agents": "x"}},
+            {"snapshot": {"agents": [1]}},
+            {"snapshot": {"workspaces": [None]}},
+            {"snapshot": {"agents": [{"pane_id": 5, "terminal_id": "t", "workspace_id": "w",
+                                      "tab_id": "t", "agent_status": "blocked"}]}},
+        ]
+        for result in replies:
+            with self.subTest(result=result):
+                server = FakeHerdr(json.dumps({"id": "hud", "result": result}).encode() + b"\n")
+                self.addCleanup(server.close)
+                state = source.read_session(Session("default", server.path, True))
+                self.assertIn("bad payload", state.error)
+
+    def test_non_object_response_and_error(self):
+        server = self.serve(b"[1, 2]\n")
+        with self.assertRaisesRegex(SourceError, "not an object"):
+            source.request(server.path, "session.snapshot")
+        server = self.serve(b'{"id":"hud","error":"boom"}\n')
+        with self.assertRaisesRegex(SourceError, "session.snapshot: error"):
+            source.request(server.path, "session.snapshot")
+
+    def test_response_size_cap(self):
+        server = self.serve(b"x" * 5000 + b"\n")
+        with self.assertRaisesRegex(SourceError, "larger than 4096 bytes"):
+            source.request(server.path, "session.snapshot", max_bytes=4096)
+
+    def test_trickling_peer_hits_the_deadline(self):
+        server = FakeHerdr(None, trickle=True)
+        self.addCleanup(server.close)
+        started = time.monotonic()
+        with self.assertRaisesRegex(SourceError, "deadline"):
+            source.request(server.path, "session.snapshot", deadline_s=0.3)
+        self.assertLess(time.monotonic() - started, 1.0)
+
+
+class SessionListTests(unittest.TestCase):
+    def test_schema_incompatible_session_lists_raise_source_error(self):
+        outputs = ['{"sessions": "x"}', '{"sessions": [1]}', "[]",
+                   '{"sessions": [{"running": true, "name": 3, "socket_path": "/s"}]}']
+        for stdout in outputs:
+            with self.subTest(stdout=stdout):
+                result = mock.Mock(returncode=0, stdout=stdout, stderr="")
+                with mock.patch.object(source.subprocess, "run", return_value=result):
+                    with self.assertRaisesRegex(SourceError, "bad output"):
+                        source.list_sessions()
+
 
 class PollerTests(unittest.TestCase):
     def make(self, list_sessions, read_session=None):
@@ -202,6 +262,33 @@ class PollerTests(unittest.TestCase):
         self.assertTrue(polls.acquire(timeout=2))
         poller.poll_now()
         self.assertTrue(polls.acquire(timeout=2))
+
+    def test_unexpected_exceptions_do_not_end_polling(self):
+        models = []
+        polled = threading.Semaphore(0)
+        calls = []
+
+        def read_session(session):
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("bug")
+            return SessionState(session)
+
+        def on_model(model):
+            models.append(model)
+            polled.release()
+            if len(models) == 2:
+                raise RuntimeError("consumer bug")
+
+        poller = Poller(on_model, interval=0.01, list_sessions=lambda: [SESSION],
+                        read_session=read_session)
+        with mock.patch.object(source.traceback, "print_exc"):
+            poller.start()
+            self.addCleanup(poller.stop)
+            for _ in range(3):
+                self.assertTrue(polled.acquire(timeout=2))
+        self.assertEqual(models[0].errors, ["internal error: RuntimeError('bug')"])
+        self.assertEqual(models[1].errors, [])
 
     def test_start_does_not_wait_for_a_slow_poll(self):
         release = threading.Event()

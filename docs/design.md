@@ -167,9 +167,10 @@ Window resolution, most to least precise:
    `wezterm-gui` 5893 → window `0x04200003` with pid 5893, class
    `herdr.herdr`.
 2. **WM_CLASS.** The user's launcher already starts
-   `wezterm-gui --always-new-process --class herdr -- herdr`, so
-   `wmctrl -x -a herdr.herdr` (or `xdotool search --classname herdr
-   windowactivate`) is exact for this setup. Make the class configurable.
+   `wezterm-gui --always-new-process --class herdr -- herdr`, so the exact
+   class `herdr.herdr` identifies it in this setup. Configurable. A class
+   cannot tell sessions apart, so this fallback applies only when every
+   local UI client belongs to the requested session.
 3. Fail visibly (row flashes, log line), never fall back to title matching.
 
 Limits:

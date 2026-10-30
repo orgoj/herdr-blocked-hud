@@ -86,6 +86,13 @@ def parse(data: dict) -> Config:
         raise ConfigError(f"corner must be one of {', '.join(CORNERS)}")
     if top.get("poll_interval", 1.0) <= 0:
         raise ConfigError("poll_interval must be positive")
+    if top.get("width", 320) <= 0:
+        raise ConfigError("width must be positive")
+    for key in ("margin_x", "margin_y"):
+        if top.get(key, 0) < 0:
+            raise ConfigError(f"{key} must not be negative")
+    if done.get("after_seconds", 60) <= 0:
+        raise ConfigError("done.after_seconds must be positive")
     if any(not isinstance(p, str) for p in done.get("ignore_regexes", [])):
         raise ConfigError("done.ignore_regexes must be a list of strings")
     if done.get("read_lines", 80) <= 0:

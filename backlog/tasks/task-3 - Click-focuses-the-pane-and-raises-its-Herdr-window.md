@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@herdr_dev'
 created_date: '2026-10-30 10:30'
-updated_date: '2026-10-30 11:07'
+updated_date: '2026-10-30 11:31'
 labels: []
 dependencies:
   - TASK-1
@@ -32,6 +32,8 @@ Click runs agent focus in the row's session, then raises that session's Herdr ho
 
 <!-- SECTION:NOTES:BEGIN -->
 Live: host window of the default session resolved by parent walk to 0x04200003 (wezterm-gui --class herdr); wmctrl activation of the already active window ok; agent focus on a missing pane exits 1 (agent_not_found) and nothing is raised. A successful agent focus was not run live because it moves the user's Herdr view; covered by unit tests and the verified --session flag placement (herdr --session default agent get). WM_CLASS is a focus_agent parameter (default herdr.herdr); TASK-5 exposes it in the config file.
+
+Review fix (agent_review): WM_CLASS fallback only when every local UI client belongs to the requested session (two sessions with one class raised the wrong window); UI-client detection parses Herdr global options so 'herdr --session x agent …' CLI processes and --machine commands are not clients, 'herdr session attach x' is, and --remote clients belong to no local session. Regression tests added.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

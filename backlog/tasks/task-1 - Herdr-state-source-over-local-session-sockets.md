@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@herdr_dev'
 created_date: '2026-10-30 10:30'
-updated_date: '2026-10-30 10:45'
+updated_date: '2026-10-30 11:31'
 labels: []
 dependencies: []
 type: feature
@@ -31,6 +31,8 @@ Poll every running local Herdr session (herdr session list --json) over its Unix
 
 <!-- SECTION:NOTES:BEGIN -->
 One session.snapshot request per running session and poll (agents, workspaces, tabs in one reply, ~21 KB, 2-4 ms live). Session list via herdr session list --json, refreshed every 10 s and retried on the next poll after a failure. No running session is reported as an error.
+
+Review fix (agent_review): schema-incompatible JSON from session list or snapshot now yields SourceError / SessionState.error instead of killing the poll thread; Poller._run has an exception boundary that reports an internal error state; socket replies are capped at 8 MiB with a 3 s absolute deadline. Regression tests added.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -9,6 +9,32 @@ AGENT = Agent("work", "w2:p4", "term_x", "w2", "w2:t1", "api", "main", "claude",
 SESSIONS = [Session("work", "/c/work.sock", False)]
 
 
+CLASS_ONLY = [focus.x11.Window("0x0420", 5893, "herdr.herdr")]
+
+
+class RaiseWindowTests(unittest.TestCase):
+    """Clients under a mux server: only the WM_CLASS fallback could match."""
+
+    def raise_with(self, clients):
+        activated = []
+        with mock.patch.object(focus.x11, "ui_clients", return_value=clients), \
+                mock.patch.object(focus.x11, "list_windows", return_value=CLASS_ONLY), \
+                mock.patch.object(focus.x11, "parent_pid", return_value=None), \
+                mock.patch.object(focus.x11, "activate", side_effect=activated.append), \
+                mock.patch.object(focus, "log"):
+            focus.raise_session_window("work", SESSIONS, "herdr.herdr")
+        return activated
+
+    def test_class_fallback_when_only_this_session_has_clients(self):
+        self.assertEqual(self.raise_with({"work": [8000]}), CLASS_ONLY)
+
+    def test_no_class_fallback_when_another_session_has_clients(self):
+        # Two sessions with the same terminal class: the match may be the
+        # other session's window, so nothing is raised.
+        self.assertEqual(self.raise_with({"work": [8000], "default": [9000]}), [])
+        self.assertEqual(self.raise_with({"default": [9000]}), [])
+
+
 class FocusAgentTests(unittest.TestCase):
     def test_focus_then_raise_session_window(self):
         calls = []

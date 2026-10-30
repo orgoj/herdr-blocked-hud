@@ -50,13 +50,13 @@ Unknown keys, wrong types and invalid regexes stop the HUD at startup.
 | Key | Default | Meaning |
 |---|---|---|
 | `poll_interval` | `1.0` | Seconds between polls |
-| `wm_class` | `"herdr.herdr"` | Exact `wmctrl -lx` class of the Herdr terminal window, used when the process tree finds none; `""` disables |
+| `wm_class` | `"herdr.herdr"` | Exact `wmctrl -lx` class of the Herdr terminal window, used when the process tree finds none and no other session has a client; `""` disables |
 | `blocked_sound` | `dialog-warning.oga` | Blocked sound file; `""` disables |
 | `done_sound` | `complete.oga` | Done sound file; `""` disables |
 | `corner` | `"top-right"` | `top-right`, `top-left`, `bottom-right`, `bottom-left` of the primary monitor |
 | `margin_x`, `margin_y` | `24`, `36` | Pixels from that corner |
-| `width` | `320` | Window width in pixels |
-| `done.after_seconds` | `60` | How long an agent stays done before it is listed |
+| `width` | `320` | Window width in pixels (positive; margins must not be negative) |
+| `done.after_seconds` | `60` | How long an agent stays done before it is listed (positive) |
 | `done.sound_enabled` | `true` | Done sound on/off, independent of the blocked sound |
 | `done.status_line_regex` | `'^\s*STATUS:'` | Finds the agent's status line |
 | `done.ignore_regexes` | `[]` | Hide an agent whose status line matches any of these |

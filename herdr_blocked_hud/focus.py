@@ -27,8 +27,11 @@ def herdr_agent_focus(agent: Agent) -> bool:
 
 
 def raise_session_window(session: str, sessions: list[Session], wm_class: str | None) -> bool:
-    clients = x11.ui_clients(sessions).get(session, [])
-    window = x11.host_window(clients, x11.list_windows(), wm_class)
+    all_clients = x11.ui_clients(sessions)
+    clients = all_clients.get(session, [])
+    # A class match proves the session only when no other session has a client.
+    fallback = wm_class if set(all_clients) == {session} else None
+    window = x11.host_window(clients, x11.list_windows(), fallback)
     if window is None:
         log(f"no Herdr window found for session {session}")
         return False
