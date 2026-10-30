@@ -189,6 +189,20 @@ class PollerTests(unittest.TestCase):
         model = self.make(lambda: []).poll_once()
         self.assertEqual(model.errors, ["no running Herdr session"])
 
+    def test_poll_now_skips_the_interval(self):
+        polls = threading.Semaphore(0)
+        poller = Poller(
+            lambda model: polls.release(),
+            interval=60,
+            list_sessions=lambda: [SESSION],
+            read_session=lambda s: SessionState(s),
+        )
+        poller.start()
+        self.addCleanup(poller.stop)
+        self.assertTrue(polls.acquire(timeout=2))
+        poller.poll_now()
+        self.assertTrue(polls.acquire(timeout=2))
+
     def test_start_does_not_wait_for_a_slow_poll(self):
         release = threading.Event()
         delivered = threading.Event()

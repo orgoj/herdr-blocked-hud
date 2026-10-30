@@ -130,6 +130,76 @@ def active_window_pid() -> int | None:
         return None
 
 
+@dataclass(frozen=True)
+class Window:
+    wid: str
+    pid: int
+    wm_class: str
+
+
+def parse_window_list(listing: str) -> list[Window]:
+    """Windows from `wmctrl -lpx`: `wid desktop pid instance.Class host title`."""
+    windows = []
+    for line in listing.splitlines():
+        fields = line.split(None, 4)
+        if len(fields) < 4:
+            continue
+        try:
+            windows.append(Window(fields[0], int(fields[2]), fields[3]))
+        except ValueError:
+            continue
+    return windows
+
+
+def list_windows() -> list[Window]:
+    try:
+        result = subprocess.run(
+            ["wmctrl", "-lpx"], capture_output=True, text=True, timeout=TOOL_TIMEOUT_S
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    return parse_window_list(result.stdout) if result.returncode == 0 else []
+
+
+def host_window(
+    client_pids: list[int],
+    windows: list[Window],
+    wm_class: str | None,
+    parent_of: Callable[[int], int | None] = parent_pid,
+) -> Window | None:
+    """First window owning a client's nearest ancestor; else exact WM_CLASS.
+
+    Window titles are never matched: a browser tab titled "herdr" is not the
+    terminal.
+    """
+    by_pid: dict[int, Window] = {}
+    for window in windows:
+        by_pid.setdefault(window.pid, window)
+    for pid in client_pids:
+        for ancestor in ancestors(pid, parent_of):
+            if ancestor in by_pid:
+                return by_pid[ancestor]
+    if wm_class:
+        for window in windows:
+            if window.wm_class == wm_class:
+                return window
+    return None
+
+
+def activate(window: Window) -> bool:
+    """Switch to the window's desktop and raise it."""
+    try:
+        result = subprocess.run(
+            ["wmctrl", "-i", "-a", window.wid],
+            capture_output=True,
+            text=True,
+            timeout=TOOL_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
 def primary_monitor() -> tuple[int, int, int, int] | None:
     """(x, y, width, height) of the primary monitor from `xrandr --listmonitors`."""
     try:

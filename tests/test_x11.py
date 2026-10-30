@@ -48,6 +48,43 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(x11.viewed_sessions(None, clients, PARENTS.get), set())
 
 
+WMCTRL = """\
+0x04400003  0 5900   google-chrome.Google-chrome  host herdr - GitHub - Google Chrome
+0x04200003  0 5893   herdr.herdr           host ▶ herdr_dev - herdr
+0x06800003  0 229557 org.wezfurlong.wezterm.org.wezfurlong.wezterm  host shell
+0x07100003  2 7000   herdr.herdr           host herdr work
+0x01200008 -1 5456   lxqt-panel.lxqt-panel  host lxqt-panel
+"""
+
+
+class WindowTests(unittest.TestCase):
+    def setUp(self):
+        self.windows = x11.parse_window_list(WMCTRL)
+
+    def test_parse_window_list(self):
+        self.assertEqual(len(self.windows), 5)
+        self.assertEqual(self.windows[1], x11.Window("0x04200003", 5893, "herdr.herdr"))
+
+    def test_host_window_by_process_tree(self):
+        window = x11.host_window([5992], self.windows, None, PARENTS.get)
+        self.assertEqual(window.wid, "0x04200003")
+        window = x11.host_window([7001], self.windows, None, PARENTS.get)
+        self.assertEqual(window.wid, "0x07100003")
+
+    def test_first_client_with_a_window_wins(self):
+        window = x11.host_window([4000, 7001, 5992], self.windows, None, PARENTS.get)
+        self.assertEqual(window.wid, "0x07100003")
+
+    def test_wm_class_fallback_is_exact_and_never_by_title(self):
+        # Client under a mux server: no window in its parent chain.
+        parents = {8000: 8837, 8837: 1}
+        window = x11.host_window([8000], self.windows, "herdr.herdr", parents.get)
+        self.assertEqual(window.wid, "0x04200003")
+        self.assertIsNone(x11.host_window([8000], self.windows, "herdr", parents.get))
+        self.assertIsNone(x11.host_window([8000], self.windows, None, parents.get))
+        self.assertIsNone(x11.host_window([], self.windows, None, parents.get))
+
+
 class MonitorTests(unittest.TestCase):
     def test_primary_monitor(self):
         listing = (

@@ -7,10 +7,12 @@ import os
 import queue
 import subprocess
 import sys
+import threading
 import tkinter as tk
 from typing import Callable
 
 from . import x11
+from .focus import focus_agent
 from .logic import HudState, Row, View
 from .source import Agent, Model, Poller, Session, SessionState
 
@@ -168,13 +170,29 @@ def main(argv: list[str]) -> int:
         print("herdr-blocked-hud: already running", file=sys.stderr)
         return 1
     root = tk.Tk(className="herdr-blocked-hud")
-    hud = Hud(root, on_click=lambda agent: None)
     if demo:
+        hud = Hud(root, on_click=lambda agent: None)
         hud.submit(demo_model(), set())
         hud.start_draining()
         root.after(8000, root.destroy)
     else:
-        poller = Poller(lambda model: hud.submit(model, viewed_for(model)))
+        sessions: list[Session] = []
+
+        def on_model(model: Model) -> None:
+            sessions[:] = [state.session for state in model.sessions]
+            hud.submit(model, viewed_for(model))
+
+        poller = Poller(on_model)
+
+        def on_click(agent: Agent) -> None:
+            def work() -> None:
+                focus_agent(agent, list(sessions))
+                # Refresh at once: the row goes away, or the gone agent drops out.
+                poller.poll_now()
+
+            threading.Thread(target=work, name="herdr-focus", daemon=True).start()
+
+        hud = Hud(root, on_click=on_click)
         poller.start()
         hud.start_draining()
     root.mainloop()

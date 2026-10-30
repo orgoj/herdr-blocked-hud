@@ -228,6 +228,7 @@ class Poller:
         self._sessions_error: str | None = None
         self._sessions_read_at: float | None = None
         self._stop = threading.Event()
+        self._wake = threading.Event()
         self._thread = threading.Thread(target=self._run, name="herdr-poller", daemon=True)
 
     def start(self) -> None:
@@ -235,6 +236,11 @@ class Poller:
 
     def stop(self) -> None:
         self._stop.set()
+        self._wake.set()
+
+    def poll_now(self) -> None:
+        """Thread-safe: run the next poll without waiting for the interval."""
+        self._wake.set()
 
     def poll_once(self) -> Model:
         now = self._clock()
@@ -258,4 +264,5 @@ class Poller:
     def _run(self) -> None:
         while not self._stop.is_set():
             self._on_model(self.poll_once())
-            self._stop.wait(self._interval)
+            self._wake.wait(self._interval)
+            self._wake.clear()
