@@ -1,4 +1,4 @@
-# hud_dev develops the HUD here; read/edit/git/hcom come from ~/.dippy/config.
+# Project tools: tests, headless GUI tests, Backlog.md and read-only Herdr queries.
 allow python3 -m unittest *
 allow python3 -m pytest *
 allow python3 *.py *
@@ -12,24 +12,6 @@ allow xvfb-run python3 tests/run|
 allow xvfb-run -a python3 tests/run *
 allow xvfb-run -a python3 tests/run|
 allow xvfb-run -a python3 -m unittest *
-allow hcom send @bin *
-allow hcom send @herdr_dev *
-allow uv-local-tool install ~/projects/herdr-blocked-hud v*|
-allow ~/bin/uv-local-tool install ~/projects/herdr-blocked-hud v*|
-deny uv-local-tool * --allow-build-change * "Installing with --allow-build-change is not allowed: install the reviewed tag without it"
-deny ~/bin/uv-local-tool * --allow-build-change * "Installing with --allow-build-change is not allowed: install the reviewed tag without it"
-deny python3 -m pip * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
-deny pip * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
-deny pip3 * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
-deny pipx * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
-deny uv * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
-deny apt * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
-deny apt-get * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
-deny git push * "Pushing is not allowed: commit and tag locally only"
-deny git push| "Pushing is not allowed: commit and tag locally only"
-deny git remote add * "Adding or changing remotes is not allowed: work in the local repository only"
-deny git remote set-url * "Adding or changing remotes is not allowed: work in the local repository only"
-deny git worktree * "Git worktrees are not allowed: work in the main working tree"
 allow backlog *
 allow herdr pane list *
 allow herdr pane list|
@@ -46,5 +28,3 @@ allow herdr tab list|
 allow herdr status *
 allow herdr status|
 allow herdr --version|
-deny herdr server * "Controlling the Herdr server is not allowed: send the problem to herdr_dev"
-deny herdr config * "Changing the Herdr config is not allowed: send the problem to herdr_dev"
