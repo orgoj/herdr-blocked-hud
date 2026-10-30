@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import os
 import queue
+import signal
 import subprocess
 import sys
 import threading
@@ -184,6 +185,22 @@ def acquire_single_instance() -> object | None:
     return handle
 
 
+def quit_on_sigint(root: tk.Misc) -> threading.Event:
+    """Ctrl+C leaves the main loop instead of raising KeyboardInterrupt in Tk.
+
+    The handler runs between Python bytecodes, i.e. inside the drain callback,
+    so it only asks Tk to stop. The returned event tells main() it happened.
+    """
+    interrupted = threading.Event()
+
+    def handler(_signum: int, _frame: object) -> None:
+        interrupted.set()
+        root.quit()
+
+    signal.signal(signal.SIGINT, handler)
+    return interrupted
+
+
 def demo_model() -> tuple[Model, tuple[LongDone, ...]]:
     session = Session("default", "", True)
     agents = tuple(
@@ -219,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
         print("herdr-blocked-hud: already running", file=sys.stderr)
         return 1
     root = tk.Tk(className="herdr-blocked-hud")
+    interrupted = quit_on_sigint(root)
     if "--demo" in argv:
         hud = Hud(root, on_click=lambda agent: None, config=config)
         model, long_done = demo_model()
@@ -258,4 +276,4 @@ def main(argv: list[str] | None = None) -> int:
         poller.start()
         hud.start_draining()
     root.mainloop()
-    return 0
+    return 130 if interrupted.is_set() else 0
