@@ -183,15 +183,18 @@ Limits:
 - Raising does not select an outer terminal tab if herdr runs in one tab of a
   multi-tab terminal.
 
-## 4. HUD window behavior to verify in the pilot (Openbox)
+## 4. HUD window behavior on Openbox
 
-- Window type: try a managed window with `-type notification` (or `dock`),
-  `-topmost`, sticky (all desktops), and check (a) it stays above, (b)
-  `deiconify()` does not take keyboard focus from the terminal. If (b) fails,
-  use `overrideredirect` and re-`lift()` on every refresh.
-- Position: top-right of the monitor under the pointer or primary monitor
-  (`xrandr --listmonitors`), configurable.
-- Clicks must not require focusing the HUD first.
+- Window: override-redirect Tk window, re-`lift()`ed on every refresh.
+  Verified on this machine: it renders above other windows, the active window
+  and keyboard focus stay on the terminal when it appears, and it is absent
+  from `_NET_CLIENT_LIST` with no `_NET_WM_DESKTOP`, so desktop switches do
+  not hide it. Chosen over a managed window because it needs no WM hints and
+  cannot take focus.
+- Position: top-right of the primary monitor (`xrandr --listmonitors`),
+  configurable (TASK-5).
+- Clicks reach the rows without focusing the HUD (rows are labels with
+  button bindings).
 
 ## 5. Proposed behavior details
 

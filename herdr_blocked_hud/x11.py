@@ -1,0 +1,178 @@
+"""Herdr UI clients, their sessions and their X11 host windows."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+from dataclasses import dataclass
+from typing import Callable, Iterable
+
+from .source import Session
+
+TOOL_TIMEOUT_S = 1.0
+# Parent-walk depth cap, so a corrupt parent loop cannot hang.
+MAX_DEPTH = 64
+
+
+@dataclass(frozen=True)
+class Process:
+    pid: int
+    argv: tuple[str, ...]
+    environ: dict[str, str]
+
+
+def is_ui_client(argv: tuple[str, ...]) -> bool:
+    """`herdr` or `herdr --session x`, not `herdr server` or CLI subcommands."""
+    if not argv or os.path.basename(argv[0]) != "herdr":
+        return False
+    return len(argv) == 1 or argv[1].startswith("-")
+
+
+def client_session(process: Process, sessions: Iterable[Session]) -> str | None:
+    """Name of the session a UI client is attached to, if it is a known one."""
+    sessions = list(sessions)
+    names = {s.name for s in sessions}
+    argv = process.argv
+    for i, arg in enumerate(argv):
+        if arg == "--session" and i + 1 < len(argv):
+            return argv[i + 1] if argv[i + 1] in names else None
+        if arg.startswith("--session="):
+            name = arg.split("=", 1)[1]
+            return name if name in names else None
+    socket_path = process.environ.get("HERDR_SOCKET_PATH")
+    if socket_path:
+        for s in sessions:
+            if s.socket_path == socket_path:
+                return s.name
+        return None
+    name = process.environ.get("HERDR_SESSION")
+    if name:
+        return name if name in names else None
+    for s in sessions:
+        if s.default:
+            return s.name
+    return None
+
+
+def read_process(pid: int) -> Process | None:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            argv = tuple(a.decode(errors="replace") for a in f.read().split(b"\0") if a)
+        if not is_ui_client(argv):
+            return Process(pid, argv, {})
+        with open(f"/proc/{pid}/environ", "rb") as f:
+            environ = dict(
+                item.decode(errors="replace").split("=", 1)
+                for item in f.read().split(b"\0")
+                if b"=" in item
+            )
+        return Process(pid, argv, environ)
+    except OSError:
+        return None
+
+
+def ui_clients(sessions: Iterable[Session]) -> dict[str, list[int]]:
+    """UI client pids per session name, from /proc."""
+    sessions = list(sessions)
+    clients: dict[str, list[int]] = {}
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        process = read_process(int(entry))
+        if process is None or not is_ui_client(process.argv):
+            continue
+        name = client_session(process, sessions)
+        if name is not None:
+            clients.setdefault(name, []).append(process.pid)
+    for pids in clients.values():
+        pids.sort()
+    return clients
+
+
+def parent_pid(pid: int) -> int | None:
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            stat = f.read()
+    except OSError:
+        return None
+    # `pid (comm) state ppid ...`; comm may contain spaces and parentheses.
+    fields = stat.rsplit(")", 1)[-1].split()
+    try:
+        return int(fields[1])
+    except (IndexError, ValueError):
+        return None
+
+
+def ancestors(pid: int, parent_of: Callable[[int], int | None] = parent_pid) -> list[int]:
+    """`pid` followed by its parents, nearest first."""
+    chain = [pid]
+    for _ in range(MAX_DEPTH):
+        parent = parent_of(chain[-1])
+        if parent is None or parent <= 1 or parent in chain:
+            break
+        chain.append(parent)
+    return chain
+
+
+def active_window_pid() -> int | None:
+    try:
+        result = subprocess.run(
+            ["xdotool", "getactivewindow", "getwindowpid"],
+            capture_output=True,
+            text=True,
+            timeout=TOOL_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    try:
+        return int(result.stdout.strip()) if result.returncode == 0 else None
+    except ValueError:
+        return None
+
+
+def primary_monitor() -> tuple[int, int, int, int] | None:
+    """(x, y, width, height) of the primary monitor from `xrandr --listmonitors`."""
+    try:
+        result = subprocess.run(
+            ["xrandr", "--listmonitors"],
+            capture_output=True,
+            text=True,
+            timeout=TOOL_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return parse_primary_monitor(result.stdout) if result.returncode == 0 else None
+
+
+def parse_primary_monitor(listing: str) -> tuple[int, int, int, int] | None:
+    # ` 0: +*DP-0 2560/698x1440/393+0+0  DP-0`; `*` marks the primary.
+    first = None
+    for line in listing.splitlines()[1:]:
+        fields = line.split()
+        if len(fields) < 3:
+            continue
+        try:
+            size, x, y = fields[2].split("+")
+            width, height = (int(part.split("/")[0]) for part in size.split("x"))
+            geometry = (int(x), int(y), width, height)
+        except ValueError:
+            continue
+        if fields[1].startswith("+*") or fields[1].startswith("*"):
+            return geometry
+        first = first or geometry
+    return first
+
+
+def viewed_sessions(
+    window_pid: int | None,
+    clients: dict[str, list[int]],
+    parent_of: Callable[[int], int | None] = parent_pid,
+) -> set[str]:
+    """Sessions whose Herdr UI client lives in the window owned by `window_pid`."""
+    if window_pid is None:
+        return set()
+    return {
+        name
+        for name, pids in clients.items()
+        if any(window_pid in ancestors(pid, parent_of) for pid in pids)
+    }
