@@ -14,17 +14,17 @@ allow xvfb-run -a python3 tests/run|
 allow xvfb-run -a python3 -m unittest *
 allow hcom send @bin *
 allow hcom send @herdr_dev *
-allow uv-local-tool install /home/michael/projects/herdr-blocked-hud v*|
-allow /home/michael/bin/uv-local-tool install /home/michael/projects/herdr-blocked-hud v*|
+allow uv-local-tool install ~/projects/herdr-blocked-hud v*|
+allow ~/bin/uv-local-tool install ~/projects/herdr-blocked-hud v*|
 deny uv-local-tool * --allow-build-change * "Installing with --allow-build-change is not allowed: install the reviewed tag without it"
-deny /home/michael/bin/uv-local-tool * --allow-build-change * "Installing with --allow-build-change is not allowed: install the reviewed tag without it"
-deny python3 -m pip * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install /home/michael/projects/herdr-blocked-hud <tag>"
-deny pip * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install /home/michael/projects/herdr-blocked-hud <tag>"
-deny pip3 * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install /home/michael/projects/herdr-blocked-hud <tag>"
-deny pipx * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install /home/michael/projects/herdr-blocked-hud <tag>"
-deny uv * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install /home/michael/projects/herdr-blocked-hud <tag>"
-deny apt * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install /home/michael/projects/herdr-blocked-hud <tag>"
-deny apt-get * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install /home/michael/projects/herdr-blocked-hud <tag>"
+deny ~/bin/uv-local-tool * --allow-build-change * "Installing with --allow-build-change is not allowed: install the reviewed tag without it"
+deny python3 -m pip * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
+deny pip * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
+deny pip3 * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
+deny pipx * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
+deny uv * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
+deny apt * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
+deny apt-get * "Installing packages is not allowed: install a reviewed tag with uv-local-tool install ~/projects/herdr-blocked-hud <tag>"
 deny git push * "Pushing is not allowed: commit and tag locally only"
 deny git push| "Pushing is not allowed: commit and tag locally only"
 deny git remote add * "Adding or changing remotes is not allowed: work in the local repository only"
