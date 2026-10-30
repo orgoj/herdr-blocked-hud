@@ -7,4 +7,5 @@ click, and hides itself when nothing is blocked.
 - Specification: `docs/spec.md` (Czech).
 - Design: `docs/design.md`; tasks in `backlog/` (Backlog.md).
 - Code: `herdr_blocked_hud/` (Python 3 stdlib only). Tests: `python3 tests/run`.
+- Release version bump: `bin/bump-version X.Y.Z` (pyproject.toml and the README install tag).
 - Temporary files only in `tmp/` (gitignored).
