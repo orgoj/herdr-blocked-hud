@@ -74,9 +74,16 @@ def place(
 
 
 class Hud:
-    def __init__(self, root: tk.Tk, on_click: Callable[[Agent], None], config: Config):
+    def __init__(
+        self,
+        root: tk.Tk,
+        on_click: Callable[[Agent], None],
+        config: Config,
+        on_dismiss: Callable[[Agent], None] = lambda agent: None,
+    ):
         self.root = root
         self.on_click = on_click
+        self.on_dismiss = on_dismiss
         self.config = config
         self.state = HudState()
         self.models: queue.Queue[tuple[Model, tuple[LongDone, ...]]] = queue.Queue()
@@ -131,10 +138,10 @@ class Hud:
             self.header("Blocked")
             for row in view.blocked:
                 self.row(row)
-        if view.done:
-            self.header("Done")
-            for row in view.done:
-                self.row(row)
+        for section in view.done:
+            self.header(section.title)
+            for row in section.rows:
+                self.row(row, dismissible=True)
         if view.error:
             tk.Label(
                 self.frame,
@@ -155,9 +162,11 @@ class Hud:
             self.frame, text=text, bg=BG, fg=HEADER_FG, font=("Sans", 10, "bold"), anchor="w"
         ).pack(fill=tk.X, pady=(0, 2))
 
-    def row(self, row: Row) -> None:
+    def row(self, row: Row, dismissible: bool = False) -> None:
+        line = tk.Frame(self.frame, bg=ROW_BG)
+        line.pack(fill=tk.X, pady=2)
         label = tk.Label(
-            self.frame,
+            line,
             text=f"▶ {row.text}",
             bg=ROW_BG,
             fg=FG,
@@ -166,10 +175,33 @@ class Hud:
             anchor="w",
             cursor="hand2",
         )
-        label.pack(fill=tk.X, pady=2)
         label.bind("<Enter>", lambda _e: label.configure(bg=ROW_ACTIVE_BG, fg=BG))
         label.bind("<Leave>", lambda _e: label.configure(bg=ROW_BG, fg=FG))
-        label.bind("<Button-1>", lambda _e, agent=row.agent: self.on_click(agent))
+        on_release(label, 1, lambda agent=row.agent: self.on_click(agent))
+        if dismissible:
+            # Packed before the label so a long label cannot push it out.
+            close = tk.Label(line, text="✕", bg=ROW_BG, fg=FG, padx=6, pady=4, cursor="hand2")
+            close.pack(side=tk.RIGHT)
+            close.bind("<Enter>", lambda _e: close.configure(bg=ROW_ACTIVE_BG, fg=BG))
+            close.bind("<Leave>", lambda _e: close.configure(bg=ROW_BG, fg=FG))
+            on_release(close, 1, lambda agent=row.agent: self.on_dismiss(agent))
+            on_release(label, 3, lambda agent=row.agent: self.on_dismiss(agent))
+        label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+
+def on_release(widget: tk.Widget, button: int, action: Callable[[], None]) -> None:
+    """Run `action` on button release over `widget`, never on press.
+
+    An action may hide the HUD. Acting on press would unmap the window before
+    the release; X then ends the implicit pointer grab and delivers the
+    release to the window below, which most applications treat as a click.
+    """
+
+    def released(event: tk.Event) -> None:
+        if 0 <= event.x < widget.winfo_width() and 0 <= event.y < widget.winfo_height():
+            action()
+
+    widget.bind(f"<ButtonRelease-{button}>", released)
 
 
 def acquire_single_instance() -> object | None:
@@ -212,7 +244,9 @@ def demo_model() -> tuple[Model, tuple[LongDone, ...]]:
             [("claude", "blocked"), ("codex", "blocked"), ("pi", "done")], start=1
         )
     )
-    return Model(sessions=(SessionState(session, agents=agents),)), (LongDone(agents[2], 185),)
+    return Model(sessions=(SessionState(session, agents=agents),)), (
+        LongDone(agents[2], 185, "NEEDS_USER"),
+    )
 
 
 USAGE = "usage: herdr-blocked-hud [--demo] [--check-config]"
@@ -269,12 +303,17 @@ def main(argv: list[str] | None = None) -> int:
         def on_click(agent: Agent) -> None:
             def work() -> None:
                 focus_agent(agent, list(sessions), config.wm_class or None)
-                # Refresh at once: the row goes away, or the gone agent drops out.
+                # Refresh at once: the row goes away (unless sticky), or the
+                # gone agent drops out.
                 poller.poll_now()
 
             threading.Thread(target=work, name="herdr-focus", daemon=True).start()
 
-        hud = Hud(root, on_click=on_click, config=config)
+        def on_dismiss(agent: Agent) -> None:
+            tracker.dismiss(agent)
+            poller.poll_now()
+
+        hud = Hud(root, on_click=on_click, config=config, on_dismiss=on_dismiss)
         poller.start()
         hud.start_draining()
     root.mainloop()

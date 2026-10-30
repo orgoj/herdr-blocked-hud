@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -10,6 +11,9 @@ from .source import Agent, Model
 
 # Consecutive polls with errors before the error row appears.
 ERROR_POLLS = 3
+
+# What a status value does to its done row; see DoneTracker.
+MODES = ("transient", "sticky", "hide")
 
 
 @dataclass(frozen=True)
@@ -19,9 +23,15 @@ class Row:
 
 
 @dataclass(frozen=True)
+class Section:
+    title: str
+    rows: tuple[Row, ...]
+
+
+@dataclass(frozen=True)
 class View:
     blocked: tuple[Row, ...] = ()
-    done: tuple[Row, ...] = ()
+    done: tuple[Section, ...] = ()
     error: str | None = None
     beep_blocked: bool = False
     beep_done: bool = False
@@ -35,6 +45,8 @@ class View:
 class LongDone:
     agent: Agent
     seconds: float
+    # Value from the agent's status line; None without one.
+    status: str | None = None
 
 
 def agent_key(agent: Agent) -> tuple[str, str]:
@@ -97,19 +109,25 @@ class HudState:
                 kept = {key for key in self._known_blocked if key[0] in failed}
             self._known_blocked = current | kept
 
-        done_keys = {done_key(d.agent) for d in long_done}
-        beep_done = bool(done_keys - self._known_done)
-        self._known_done = done_keys
+        # A sticky row first listed after the user viewed the pane does not beep.
+        entered = {done_key(d.agent) for d in long_done if d.agent.status == "done"}
+        beep_done = bool(entered - self._known_done)
+        self._known_done = {done_key(d.agent) for d in long_done}
 
         show_session = len({s.session.name for s in model.sessions}) > 1
         rows = tuple(Row(a, row_text(a, show_session)) for a in blocked)
-        done_rows = tuple(
-            Row(d.agent, f"{row_text(d.agent, show_session)} · {elapsed_text(d.seconds)}")
-            for d in sorted(long_done, key=lambda d: -d.seconds)
+        # One section per status value, oldest row first, sections in that order.
+        grouped: dict[str | None, list[Row]] = {}
+        for d in sorted(long_done, key=lambda d: -d.seconds):
+            text = f"{row_text(d.agent, show_session)} · {elapsed_text(d.seconds)}"
+            grouped.setdefault(d.status, []).append(Row(d.agent, text))
+        sections = tuple(
+            Section("Done" if status is None else f"Done · {status}", tuple(group))
+            for status, group in grouped.items()
         )
         return View(
             blocked=rows,
-            done=done_rows,
+            done=sections,
             error=error,
             beep_blocked=beep,
             beep_done=beep_done,
@@ -122,38 +140,55 @@ def done_key(agent: Agent) -> tuple[str, str, int | None]:
 
 @dataclass
 class DoneConfig:
-    after_seconds: float = 60
+    after_seconds: float = 5
     sound_enabled: bool = True
-    # Bottom-most line matching this is the agent's final status line.
-    status_line_regex: str = r"^\s*STATUS:"
-    # Do not report an agent whose status line matches any of these.
-    ignore_regexes: list[str] = field(default_factory=list)
+    # Bottom-most line matching this is the agent's status line; its first
+    # group is the status value.
+    status_regex: str = r"^\s*STATUS:\s*(\S+)"
+    # Mode per status value; other values get default_mode, a reply without
+    # a status line (or a failed read) gets no_status_mode.
+    modes: dict[str, str] = field(default_factory=dict)
+    default_mode: str = "transient"
+    no_status_mode: str = "transient"
     read_lines: int = 80
 
     def __post_init__(self):
-        # Invalid patterns raise re.error here, at startup.
-        self.status_line = re.compile(self.status_line_regex)
-        self.ignore = [re.compile(pattern) for pattern in self.ignore_regexes]
+        # Invalid settings raise here, at startup: re.error or ValueError.
+        self.status = re.compile(self.status_regex)
+        if self.status.groups < 1:
+            raise ValueError("status_regex needs a group for the status value")
+        for mode in (*self.modes.values(), self.default_mode, self.no_status_mode):
+            if mode not in MODES:
+                raise ValueError(f"mode {mode!r} is not one of {', '.join(MODES)}")
 
 
-def should_report(text: str | None, config: DoneConfig) -> bool:
-    """Whether a finished agent's output still deserves a row."""
-    if not config.ignore or text is None:
-        return True
-    status = None
-    for line in text.splitlines():
-        if config.status_line.search(line):
-            status = line
+def status_value(text: str | None, config: DoneConfig) -> str | None:
+    """Status value from the bottom-most status line, or None."""
+    value = None
+    for line in (text or "").splitlines():
+        match = config.status.search(line)
+        if match:
+            value = match.group(1)
+    return value
+
+
+def mode_for(status: str | None, config: DoneConfig) -> str:
     if status is None:
-        return True
-    return not any(pattern.search(status) for pattern in config.ignore)
+        return config.no_status_mode
+    return config.modes.get(status, config.default_mode)
 
 
 class DoneTracker:
-    """Measures how long agents stay `done` and applies the reply filter.
+    """Measures how long agents stay `done` and sorts them by status value.
 
-    Runs on the poll thread: `read_tail` does I/O, once per completion and
-    only when ignore patterns are configured.
+    A completion is listed after `after_seconds` in `done`. Its mode decides
+    what happens next: `transient` leaves when the pane leaves `done` (the
+    user viewed it), `sticky` stays while the pane is `idle` with the same
+    completion and leaves when the agent works again, `hide` is never listed.
+    A dismissed completion is not listed again.
+
+    Runs on the poll thread: `read_tail` does I/O, once per completion.
+    `dismiss` is called from the Tk thread.
     """
 
     def __init__(
@@ -166,32 +201,52 @@ class DoneTracker:
         self.read_tail = read_tail
         self.clock = clock
         self.since: dict[tuple[str, str, int | None], float] = {}
-        self.report: dict[tuple[str, str, int | None], bool] = {}
+        self.status: dict[tuple[str, str, int | None], str | None] = {}
+        self.dismissed: set[tuple[str, str, int | None]] = set()
+        self._lock = threading.Lock()
+        self._to_dismiss: set[tuple[str, str, int | None]] = set()
+
+    def dismiss(self, agent: Agent) -> None:
+        """Thread-safe: stop listing this completion; applied on the next update."""
+        with self._lock:
+            self._to_dismiss.add(done_key(agent))
 
     def update(self, model: Model) -> tuple[LongDone, ...]:
         now = self.clock()
+        with self._lock:
+            self.dismissed |= self._to_dismiss
+            self._to_dismiss.clear()
         reachable = {s.session.name for s in model.sessions if not s.error}
-        done = model.agents_with_status("done")
-        current = {done_key(a) for a in done}
-        # Forget completions that ended; keep those of unreachable sessions.
-        for table in (self.since, self.report):
-            for key in list(table):
-                if key not in current and key[0] in reachable:
-                    del table[key]
+        panes = {(a.session, a.terminal_id): a for s in model.sessions for a in s.agents}
+        for agent in model.agents_with_status("done"):
+            self.since.setdefault(done_key(agent), now)
         result = []
-        for agent in done:
-            key = done_key(agent)
-            since = self.since.setdefault(key, now)
-            seconds = now - since
-            if seconds < self.config.after_seconds:
+        for key, since in list(self.since.items()):
+            agent = panes.get(key[:2])
+            if agent is None or agent.completion_seq != key[2]:
+                # Pane gone or a new completion; unreachable sessions keep theirs.
+                if key[0] in reachable:
+                    self.forget(key)
                 continue
-            if key not in self.report:
-                text = (
-                    self.read_tail(agent, self.config.read_lines)
-                    if self.config.ignore
-                    else None
-                )
-                self.report[key] = should_report(text, self.config)
-            if self.report[key]:
-                result.append(LongDone(agent, seconds))
+            if agent.status == "done":
+                if now - since < self.config.after_seconds:
+                    continue
+            elif agent.status != "idle" or self.mode(key, agent) != "sticky":
+                # Viewed (idle) or working again: only a viewed sticky one stays.
+                self.forget(key)
+                continue
+            if self.mode(key, agent) == "hide" or key in self.dismissed:
+                continue
+            result.append(LongDone(agent, now - since, self.status[key]))
         return tuple(result)
+
+    def mode(self, key: tuple[str, str, int | None], agent: Agent) -> str:
+        if key not in self.status:
+            text = self.read_tail(agent, self.config.read_lines)
+            self.status[key] = status_value(text, self.config)
+        return mode_for(self.status[key], self.config)
+
+    def forget(self, key: tuple[str, str, int | None]) -> None:
+        self.since.pop(key, None)
+        self.status.pop(key, None)
+        self.dismissed.discard(key)

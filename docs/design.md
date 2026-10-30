@@ -212,40 +212,47 @@ Limits:
 An agent that finished may still want something, so the HUD also lists agents
 that stay `done` (finished, not yet seen) longer than a threshold.
 
-- Second section below blocked: `workspace · tab · agent · 3m`, oldest first.
-- Threshold `done.after_seconds`, default `60`. The timer starts at the first
+- Sections below blocked, one per status value (`Done · NEEDS_USER`, plain
+  `Done` without a status line): `workspace · tab · agent · 3m`, oldest first.
+- Threshold `done.after_seconds`, default `5`. The timer starts at the first
   poll that sees the `(terminal_id, completion_seq)` as `done`; a new
   completion restarts it. After a HUD restart, panes already `done` start
-  counting from the HUD start.
-- The row disappears when the pane leaves `done`: user views it (server marks
-  seen → `idle`), clicks it (`agent focus` marks seen), or the agent works
-  again.
-- Sound when a row enters the section: own switch `done.sound_enabled`
-  (default `true`) and file `done.sound`, default a quieter sound than
-  blocked. Turning it off leaves the blocked sound untouched.
-- Click: same as blocked (focus pane, raise window).
+  counting from the HUD start; sticky state is not kept across restarts
+  (decided).
+- Sound when a row enters a section while its pane is `done`: own switch
+  `done.sound_enabled` (default `true`) and file `done.sound`, default a
+  quieter sound than blocked. Turning it off leaves the blocked sound
+  untouched.
+- Click: same as blocked (focus pane, raise window). `✕` or a right click
+  dismisses the row for that completion.
 
-Optional reply filter, **default off** (empty list = every long-done agent is
-reported):
+Status value and mode (user requirement: `DONE` replies are usually fine once
+seen, others need follow-up and must not vanish when the pane is opened):
 
 ```toml
 [done]
-after_seconds = 60
-sound_enabled = true           # independent of the blocked sound
-# Bottom-most line matching this regex is the agent's final status line.
-status_line_regex = '^\s*STATUS:'
-# Do not report the agent when its status line matches any of these.
-ignore_regexes = []            # e.g. ['^\s*STATUS:\s*DONE\s*$']
+# Bottom-most matching line is the status line; group 1 is the value.
+status_regex = '^\s*STATUS:\s*(\S+)'
+default_mode = "transient"     # values not in [done.modes]
+no_status_mode = "transient"   # no status line, or the read failed
 read_lines = 80                # recent rows read once per completion
+
+[done.modes]                   # value -> transient | sticky | hide
 ```
 
-- Read once per `(terminal_id, completion_seq)` when the threshold passes,
-  never every poll; cache the decision.
-- Only the bottom-most line matching `status_line_regex` is tested. Matching
-  ignore regexes anywhere in the read window would be wrong: a short reply
+- `transient`: the row disappears when the pane leaves `done`: user views it
+  (server marks seen → `idle`), clicks it (`agent focus` marks seen), or the
+  agent works again.
+- `sticky`: the row stays while the pane is `idle` with the same
+  `completion_seq` (Herdr keeps it on idle panes and clears it while
+  working); it leaves when the agent works again or finishes anew.
+- `hide`: never listed.
+- Read once per `(terminal_id, completion_seq)`, when the threshold passes or
+  when the pane leaves `done` for `idle` before it (so a sticky reply viewed
+  at once is still listed); never every poll; cache the value.
+- Only the bottom-most line matching `status_regex` counts: a short reply
   without a status block, or one ending `STATUS: NEEDS_USER`, still has the
   previous turn's `STATUS: DONE` higher up in the scrollback.
-- No status line found, or the read fails → report (fail open; decided).
 - Agent TUIs draw their prompt box below the reply; the status line is above
   it, inside the last 80 rows unless the reply's tail is very long.
 - A regex that does not compile is a startup config error, not a silent skip.
@@ -287,9 +294,10 @@ one local session.
    in `$XDG_CACHE_HOME/herdr-blocked-hud/`): theme sounds such as
    `dialog-warning.oga` could not be told apart from desktop notifications,
    and blocked and done must sound different.
-3. **Long-done section: yes** — 60 s default, regex filter off by default,
-   agents without a status line are reported, done sound switchable on its
-   own (section 5).
+3. **Long-done section: yes** — 5 s default, sections per STATUS value with
+   a transient/sticky/hide mode each (default transient, also for agents
+   without a status line), sticky state lost on a HUD restart, done sound
+   switchable on its own (section 5).
 4. **Several Herdr windows: raise the first match.**
 5. **Latency: 1 s polling is acceptable**; no plugin wake-up (option C).
 6. **Never hide a blocked row.** Every blocked pane is listed and beeps when

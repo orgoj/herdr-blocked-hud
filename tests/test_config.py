@@ -25,9 +25,10 @@ class LoadTests(unittest.TestCase):
     def test_missing_file_gives_defaults(self):
         loaded = config.load(self.dir / "absent.toml")
         self.assertEqual(loaded, Config())
-        self.assertEqual(loaded.done.after_seconds, 60)
+        self.assertEqual(loaded.done.after_seconds, 5)
         self.assertTrue(loaded.done.sound_enabled)
-        self.assertEqual(loaded.done.ignore_regexes, [])
+        self.assertEqual(loaded.done.modes, {})
+        self.assertEqual(loaded.done.default_mode, "transient")
 
     def test_example_file_equals_defaults(self):
         self.assertEqual(config.load(EXAMPLE), Config())
@@ -36,14 +37,15 @@ class LoadTests(unittest.TestCase):
         loaded = config.load(self.write(
             'poll_interval = 2\ncorner = "bottom-left"\nwm_class = ""\n'
             '[done]\nafter_seconds = 120\nsound_enabled = false\n'
-            "ignore_regexes = ['STATUS:\\s*DONE']\n"
+            'default_mode = "sticky"\n[done.modes]\nDONE = "hide"\n'
         ))
         self.assertEqual(loaded.poll_interval, 2)
         self.assertEqual(loaded.corner, "bottom-left")
         self.assertEqual(loaded.wm_class, "")
         self.assertEqual(loaded.done.after_seconds, 120)
         self.assertFalse(loaded.done.sound_enabled)
-        self.assertEqual(len(loaded.done.ignore), 1)
+        self.assertEqual(loaded.done.default_mode, "sticky")
+        self.assertEqual(loaded.done.modes, {"DONE": "hide"})
 
     def test_errors(self):
         cases = {
@@ -58,8 +60,14 @@ class LoadTests(unittest.TestCase):
             "margin_y = -5\n": "margin_y must not be negative",
             "[done]\nafter_seconds = 0\n": "after_seconds must be positive",
             "[done]\nafter_seconds = -10\n": "after_seconds must be positive",
-            "[done]\nignore_regexes = ['(']\n": "invalid regex",
-            "[done]\nignore_regexes = [1]\n": "list of strings",
+            "[done]\nstatus_regex = '('\n": "invalid regex",
+            "[done]\nstatus_regex = 'STATUS:'\n": "needs a group",
+            "[done]\nignore_regexes = []\n": "unknown key done.ignore_regexes",
+            '[done]\ndefault_mode = "keep"\n': "mode 'keep' is not one of",
+            '[done]\nno_status_mode = "sticky "\n': "is not one of",
+            '[done.modes]\nDONE = "gone"\n': "is not one of",
+            "[done.modes]\nDONE = 1\n": "modes values must be strings",
+            "[done]\nmodes = 1\n": "done.modes has the wrong type",
             "done = 1\n": "must be a table",
             "width = \n": "config.toml",
         }

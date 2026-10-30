@@ -70,8 +70,10 @@ TOP_LEVEL = {
 DONE = {
     "after_seconds": (int, float),
     "sound_enabled": bool,
-    "status_line_regex": str,
-    "ignore_regexes": list,
+    "status_regex": str,
+    "modes": dict,
+    "default_mode": str,
+    "no_status_mode": str,
     "read_lines": int,
 }
 
@@ -92,16 +94,18 @@ def parse(data: dict) -> Config:
     for key in ("margin_x", "margin_y"):
         if top.get(key, 0) < 0:
             raise ConfigError(f"{key} must not be negative")
-    if done.get("after_seconds", 60) <= 0:
+    if done.get("after_seconds", 5) <= 0:
         raise ConfigError("done.after_seconds must be positive")
-    if any(not isinstance(p, str) for p in done.get("ignore_regexes", [])):
-        raise ConfigError("done.ignore_regexes must be a list of strings")
+    if any(not isinstance(m, str) for m in done.get("modes", {}).values()):
+        raise ConfigError("done.modes values must be strings")
     if done.get("read_lines", 80) <= 0:
         raise ConfigError("done.read_lines must be positive")
     try:
         done_config = DoneConfig(**done)
     except re.error as err:
         raise ConfigError(f"done: invalid regex: {err}") from err
+    except ValueError as err:
+        raise ConfigError(f"done: {err}") from err
     return Config(**top, done=done_config)
 
 

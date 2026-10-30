@@ -6,7 +6,9 @@ click, and hides itself when nothing is blocked.
 
 - Specification: `docs/spec.md` (Czech).
 - Design: `docs/design.md`; tasks in `backlog/` (Backlog.md).
-- Code: `herdr_blocked_hud/` (Python 3 stdlib only). Tests: `python3 tests/run`.
+- Code: `herdr_blocked_hud/` (Python 3 stdlib only). Tests: `python3 tests/run`;
+  with the Tk tests (never on the real display):
+  `xvfb-run -a env HUD_GUI_TESTS=1 python3 tests/run`.
 - Release: `bin/bump-version X.Y.Z` (pyproject.toml and the README install
   tag), `python3 tests/run`, commit, annotated tag `vX.Y.Z`.
 - Temporary files only in `tmp/` (gitignored).

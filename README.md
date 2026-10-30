@@ -13,9 +13,13 @@ you:
 - **Blocked**: Herdr detected an approval or question prompt. A sound plays
   when a pane becomes blocked.
 - **Done**: the agent finished and you have not looked at it for
-  `done.after_seconds` (default 60 s). A separate, switchable sound plays.
+  `done.after_seconds` (default 5 s), grouped by the value of its final
+  `STATUS:` line. By default a row leaves once you view the pane; a status
+  value set to `sticky` stays until the agent works again. A separate,
+  switchable sound plays.
 
-Click a row to focus that pane in Herdr and raise its terminal window. The
+Click a row to focus that pane in Herdr and raise its terminal window; `✕`
+or a right click dismisses a done row. The
 window disappears when nothing is listed. A blocked pane stays listed until
 it is no longer blocked, even while it is on screen in Herdr. If Herdr
 cannot be reached for three polls, a grey error row appears.
@@ -73,24 +77,35 @@ Unknown keys, wrong types and invalid regexes stop the HUD at startup.
 | `corner` | `"top-right"` | `top-right`, `top-left`, `bottom-right`, `bottom-left` of the primary monitor |
 | `margin_x`, `margin_y` | `24`, `36` | Pixels from that corner |
 | `width` | `320` | Window width in pixels (positive; margins must not be negative) |
-| `done.after_seconds` | `60` | How long an agent stays done before it is listed (positive) |
+| `done.after_seconds` | `5` | How long an agent stays done before it is listed (positive) |
 | `done.sound_enabled` | `true` | Done sound on/off, independent of the blocked sound |
-| `done.status_line_regex` | `'^\s*STATUS:'` | Finds the agent's status line |
-| `done.ignore_regexes` | `[]` | Hide an agent whose status line matches any of these |
+| `done.status_regex` | `'^\s*STATUS:\s*(\S+)'` | Finds the agent's status line; group 1 is the status value |
+| `done.modes` | `{}` | Mode per status value: `"transient"`, `"sticky"` or `"hide"` |
+| `done.default_mode` | `"transient"` | Mode of status values not in `done.modes` |
+| `done.no_status_mode` | `"transient"` | Mode of a reply without a status line, or a failed read |
 | `done.read_lines` | `80` | Rows of pane output read per completion |
 
-### Hiding agents by their status line
+### Done sections by status value
 
-With `done.ignore_regexes` empty, every long-done agent is listed. When set,
-the HUD reads the agent's last `done.read_lines` rows once per completion,
-takes the bottom-most line matching `done.status_line_regex`, and hides the
-agent when that line matches any ignore regex. No status line, or a failed
-read, keeps the agent listed. Example: list only agents that did not finish
-with `STATUS: DONE`:
+When an agent finishes, the HUD reads its last `done.read_lines` rows once,
+takes the bottom-most line matching `done.status_regex`, and lists the agent
+under a `Done · <value>` section (plain `Done` without a status line). The
+value's mode decides how long the row stays:
+
+- `transient`: until you view the pane (Herdr marks it seen), as Herdr does.
+- `sticky`: also after you viewed it, until the agent works again or
+  finishes anew; a pane viewed before `done.after_seconds` is still listed.
+- `hide`: never listed.
+
+The `✕` button or a right click dismisses a done row for that completion.
+Example: forget `DONE` replies once seen, keep every other one listed:
 
 ```toml
 [done]
-ignore_regexes = ['STATUS:\s*DONE\s*$']
+default_mode = "sticky"
+
+[done.modes]
+DONE = "transient"
 ```
 
 ## How it works
@@ -105,6 +120,7 @@ notes: `docs/design.md`.
 
 ```bash
 python3 tests/run
+xvfb-run -a env HUD_GUI_TESTS=1 python3 tests/run   # with the Tk tests, off-screen
 ```
 
 ## License

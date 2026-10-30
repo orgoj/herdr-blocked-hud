@@ -23,13 +23,23 @@ width = 320
 
 [done]
 # List agents that stay done (finished, not yet viewed) this many seconds.
-after_seconds = 60
-# Play done_sound when an agent enters the Done section.
+after_seconds = 5
+# Play done_sound when an agent enters a Done section.
 sound_enabled = true
-# The bottom-most line matching this regex is the agent's status line.
-status_line_regex = '^\s*STATUS:'
-# Hide an agent whose status line matches any of these regexes.
-# Empty: every long-done agent is listed. Example: ['STATUS:\s*DONE\s*$']
-ignore_regexes = []
+# The bottom-most line matching this regex is the agent's status line; its
+# first group is the status value, and each value gets its own Done section.
+status_regex = '^\s*STATUS:\s*(\S+)'
+# What happens to a row, per status value:
+#   "transient": it leaves once you view the pane (Herdr marks it seen)
+#   "sticky":    it stays until the agent works again or you dismiss it
+#   "hide":      it is never listed
+# default_mode covers values not in [done.modes]; no_status_mode covers a
+# reply without a status line (or a failed read).
+default_mode = "transient"
+no_status_mode = "transient"
 # Rendered rows read from the agent's pane (once per completion).
 read_lines = 80
+
+[done.modes]
+# Example: DONE = "transient" with default_mode = "sticky" keeps every
+# other status value listed until the agent works again.
