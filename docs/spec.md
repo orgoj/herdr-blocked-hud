@@ -28,7 +28,7 @@ Běžné systémové desktopové notifikace (toasty přes D-Bus `org.freedesktop
 - **Čistě stavové zobrazení:** Zobrazuje pouze aktuálně blokované panely (`workspace · tab · agent`).
 - **Click-to-focus:** Kliknutí na položku:
   1. Zavolá `herdr agent focus <pane_id>` (přepne panel v multiplexeru).
-  2. Aktivuje a vynese hostitelské okno terminálu do popředí pomocí `wmctrl` / `xdotool`.
+  2. Aktivuje a vynese hostitelské okno terminálu do popředí pomocí `wmctrl`.
 - **Automatické skrytí:** Jakmile uživatel agenta odblokuje a stav přejde na `working`, panel položku odstraní. Pokud je seznam prázdný, celé okno se automaticky skryje (`withdraw`).
 
 ---

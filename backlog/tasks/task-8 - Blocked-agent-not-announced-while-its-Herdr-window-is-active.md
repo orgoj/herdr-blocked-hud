@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@herdr_dev'
 created_date: '2026-10-30 13:58'
-updated_date: '2026-10-30 14:09'
+updated_date: '2026-10-30 14:11'
 labels: []
 dependencies: []
 type: bug
@@ -30,6 +30,8 @@ User report on v0.1.2: an agent was blocked (red in Herdr) but the HUD showed no
 
 <!-- SECTION:NOTES:BEGIN -->
 User decision: the looking-at rule must not apply to blocked rows; done needs none either because Herdr clears done when the pane is focused. So the rule is removed completely, with its X11 active-window query (xdotool).
+
+Review fix (agent_review): docs/spec.md and the design.md plugin comparison no longer say the HUD uses xdotool.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

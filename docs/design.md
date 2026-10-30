@@ -278,7 +278,7 @@ one local session.
      session-aware: it takes the first process whose argv looks like a Herdr UI
      client (`herdr` or `herdr -…`), walks parents and uses
      `xdotool search --pid`. The HUD reuses that pid-walk, adds the session
-     filter above.
+     filter above and raises the window with `wmctrl`.
    - Remote machines (`--machine`) are out of scope.
 2. **Sound: HUD-owned `paplay`.** Simplest: works without a foreground Herdr
    client and without Herdr config. If Herdr's own `[ui.sound]` request sound
