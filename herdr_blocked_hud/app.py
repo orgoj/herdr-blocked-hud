@@ -29,6 +29,8 @@ ROW_ACTIVE_BG = "#f38ba8"
 FG = "#cdd6f4"
 HEADER_FG = "#fab387"
 ERROR_FG = "#9399b2"
+# Has ↻ and ×; the default Tk fonts lack ↻ and show a box instead.
+CONTROL_FONT = ("DejaVu Sans", 11)
 
 
 def play(path: str) -> None:
@@ -88,6 +90,8 @@ class Hud:
         self.state = HudState()
         self.models: queue.Queue[tuple[Model, tuple[LongDone, ...]]] = queue.Queue()
         self.shown: View | None = None
+        # "quit" or "restart" once a control button ended the main loop.
+        self.exit_action: str | None = None
 
         # Override-redirect: Openbox neither manages nor focuses the window,
         # it shows on every desktop, and `lift()` keeps it on top.
@@ -134,6 +138,17 @@ class Hud:
     def render(self, view: View) -> None:
         for child in self.frame.winfo_children():
             child.destroy()
+        # The first header shares its line with the restart and quit buttons.
+        self.top = tk.Frame(self.frame, bg=BG)
+        self.top.pack(fill=tk.X)
+        self.top_free = True
+        for text, action in (("×", "quit"), ("↻", "restart")):
+            button = tk.Label(
+                self.top, text=text, bg=BG, fg=HEADER_FG, font=CONTROL_FONT, padx=4,
+                cursor="hand2",
+            )
+            button.pack(side=tk.RIGHT)
+            on_release(button, 1, lambda action=action: self.exit(action))
         if view.blocked:
             self.header("Blocked")
             for row in view.blocked:
@@ -158,9 +173,20 @@ class Hud:
         self.root.geometry(f"{self.config.width}x{height}+{left}+{top}")
 
     def header(self, text: str) -> None:
-        tk.Label(
-            self.frame, text=text, bg=BG, fg=HEADER_FG, font=("Sans", 10, "bold"), anchor="w"
-        ).pack(fill=tk.X, pady=(0, 2))
+        label = tk.Label(
+            self.top if self.top_free else self.frame,
+            text=text, bg=BG, fg=HEADER_FG, font=("Sans", 10, "bold"), anchor="w",
+        )
+        if self.top_free:
+            label.pack(side=tk.LEFT, fill=tk.X, expand=True, pady=(0, 2))
+            self.top_free = False
+        else:
+            label.pack(fill=tk.X, pady=(0, 2))
+
+    def exit(self, action: str) -> None:
+        """End the main loop; main() then quits or restarts."""
+        self.exit_action = action
+        self.root.quit()
 
     def row(self, row: Row, dismissible: bool = False) -> None:
         line = tk.Frame(self.frame, bg=ROW_BG)
@@ -317,4 +343,29 @@ def main(argv: list[str] | None = None) -> int:
         poller.start()
         hud.start_draining()
     root.mainloop()
+    if hud.exit_action == "restart" and not interrupted.is_set():
+        root.destroy()
+        try:
+            restart()
+        except OSError as err:
+            print(f"herdr-blocked-hud: restart failed: {err}", file=sys.stderr)
+            return 1
     return 130 if interrupted.is_set() else 0
+
+
+def restart_command() -> list[str]:
+    """This process's command line: the console script (or `-m`) runs again,
+    from whatever version is installed now."""
+    return [sys.executable, *sys.orig_argv[1:]]
+
+
+def restart() -> None:
+    """Replace this process with a fresh HUD.
+
+    Python opens the lock file non-inheritable, so the exec closes it and the
+    new process can take the single-instance lock.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    command = restart_command()
+    os.execv(command[0], command)

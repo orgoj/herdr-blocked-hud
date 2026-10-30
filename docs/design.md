@@ -225,6 +225,9 @@ that stay `done` (finished, not yet seen) longer than a threshold.
   untouched.
 - Click: same as blocked (focus pane, raise window). `×` or a right click
   dismisses the row for that completion.
+- Top line: `↻` restarts (exec of `sys.executable` with the original argv,
+  which picks up a newly installed version; the non-inheritable lock file
+  closes on exec), `×` quits. All clicks act on button release.
 
 Status value and mode (user requirement: `DONE` replies are usually fine once
 seen, others need follow-up and must not vanish when the pane is opened):

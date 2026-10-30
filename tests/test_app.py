@@ -1,7 +1,15 @@
+import os
+import pathlib
+import shutil
 import signal
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from herdr_blocked_hud.app import quit_on_sigint
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 class FakeRoot:
@@ -36,3 +44,31 @@ class SigintTests(unittest.TestCase):
         self.assertEqual(root.quit_calls, 0)
         root.mainloop()
         self.assertEqual(root.quit_calls, 1)
+
+
+# Holds the lock, restarts itself once; the new process must get the lock.
+RESTARTER = """
+import os, sys
+from herdr_blocked_hud import app
+lock = app.acquire_single_instance()
+if os.environ.get("RESTARTED"):
+    print("second run, lock", "free" if lock else "held", sys.argv[1:])
+else:
+    os.environ["RESTARTED"] = "1"
+    app.restart()
+"""
+
+
+class RestartTests(unittest.TestCase):
+    def test_restart_runs_the_same_command_and_frees_the_lock(self):
+        (ROOT / "tmp").mkdir(exist_ok=True)
+        runtime = tempfile.mkdtemp(dir=ROOT / "tmp")
+        self.addCleanup(shutil.rmtree, runtime, ignore_errors=True)
+        env = {k: v for k, v in os.environ.items() if k != "RESTARTED"}
+        env.update(XDG_RUNTIME_DIR=runtime, PYTHONPATH=str(ROOT))
+        result = subprocess.run(
+            [sys.executable, "-c", RESTARTER, "--demo"],
+            env=env, capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "second run, lock free ['--demo']\n")

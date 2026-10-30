@@ -19,7 +19,9 @@ you:
   switchable sound plays.
 
 Click a row to focus that pane in Herdr and raise its terminal window; `×`
-or a right click dismisses a done row. The
+or a right click dismisses a done row. On the top line, `↻` restarts the
+HUD with the same command (so a newly installed version starts) and `×`
+quits it. The
 window disappears when nothing is listed. A blocked pane stays listed until
 it is no longer blocked, even while it is on screen in Herdr. If Herdr
 cannot be reached for three polls, a grey error row appears.

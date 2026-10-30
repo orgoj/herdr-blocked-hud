@@ -66,20 +66,36 @@ class HudGuiTests(unittest.TestCase):
         self.root.deiconify()
         self.root.update()
         texts = [text for text, _ in self.labels()]
+        # Top line: quit and restart packed from the right, then the first header.
         self.assertEqual(
             texts,
-            ["Blocked", "▶ blocked row", "Done · NEEDS_USER", "▶ row a", "×", "Done",
-             "▶ row b", "×"],
+            ["×", "↻", "Blocked", "▶ blocked row", "Done · NEEDS_USER", "▶ row a", "×",
+             "Done", "▶ row b", "×"],
         )
         widgets = [widget for _, widget in self.labels()]
+        self.assertLess(widgets[1].winfo_x(), widgets[0].winfo_x())   # ↻ before ×
         self.before = ([], [])
-        self.press(widgets[3], 1, release_at=(-5, 2))     # released outside: nothing
-        self.press(widgets[4], 1)       # × of row a
-        self.press(widgets[6], 3)       # right click on row b
-        self.press(widgets[3], 1)       # left click on row a focuses it
-        self.press(widgets[1], 3)       # right click on a blocked row does nothing
+        self.press(widgets[5], 1, release_at=(-5, 2))     # released outside: nothing
+        self.press(widgets[6], 1)       # × of row a
+        self.press(widgets[8], 3)       # right click on row b
+        self.press(widgets[5], 1)       # left click on row a focuses it
+        self.press(widgets[3], 3)       # right click on a blocked row does nothing
         self.assertEqual(self.dismissed, [a, b])
         self.assertEqual(self.clicked, [a])
+        self.assertIsNone(self.hud.exit_action)
+
+    def test_control_buttons_end_the_main_loop(self):
+        self.hud.render(View(error="refused"))
+        self.root.deiconify()
+        self.root.update()
+        quit_button, restart_button = [w for _, w in self.labels()][:2]
+        self.before = ([], [])
+        self.press(restart_button, 1, release_at=(-5, 2))
+        self.assertIsNone(self.hud.exit_action)
+        self.press(restart_button, 1)
+        self.assertEqual(self.hud.exit_action, "restart")
+        self.press(quit_button, 1)
+        self.assertEqual(self.hud.exit_action, "quit")
 
 
 if __name__ == "__main__":
