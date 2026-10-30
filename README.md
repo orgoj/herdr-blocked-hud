@@ -1,5 +1,12 @@
 # herdr-blocked-hud
 
+> **Personal pilot project.** I wrote this for my own computer and the
+> tools I run on it (Lubuntu with LXQt and Openbox, X11, WezTerm, Herdr
+> 0.9.5). It may not work anywhere else, and I do not plan to support other
+> setups. It is not an official [Herdr](https://github.com/herdrdev/herdr)
+> project and is not affiliated with it. Provided as is, without warranty of
+> any kind; see [LICENSE](LICENSE).
+
 Small always-on-top window for Linux/X11 that lists Herdr agents that need
 you:
 
@@ -20,16 +27,17 @@ the session name is shown only when more than one session runs.
 
 - Python 3.11+ with Tk (`python3-tk`), no other Python packages
 - `herdr` on `PATH`, X11 with `wmctrl`, `xdotool`, `xrandr`, and `paplay`
-- Tested on Lubuntu (LXQt + Openbox) with Herdr 0.9.5
+- Tested only on Lubuntu (LXQt + Openbox) with Herdr 0.9.5
 
 ## Install and run
 
 Install a tagged release as a uv tool (a copy, so work in the checkout does
 not affect the running HUD). The Python must include Tk; uv's managed
-CPython does.
+CPython does. Replace `<repository-url>` with the Git URL of this repository
+or of a local clone (`file:///path/to/herdr-blocked-hud`).
 
 ```bash
-uv tool install --python 3.14 git+file:///path/to/herdr-blocked-hud@v0.1.0
+uv tool install --python 3.14 git+<repository-url>@v0.1.0
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # show sample rows for 8 s (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -98,3 +106,7 @@ notes: `docs/design.md`.
 ```bash
 python3 tests/run
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE). No warranty.

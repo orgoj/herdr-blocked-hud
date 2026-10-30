@@ -7,6 +7,9 @@ name = "herdr-blocked-hud"
 version = "0.1.0"
 description = "Always-on-top X11 HUD for blocked and long-done Herdr agents"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Michael Heca" }]
 requires-python = ">=3.11"
 dependencies = []
 
