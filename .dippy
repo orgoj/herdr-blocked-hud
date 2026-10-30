@@ -1,7 +1,46 @@
-# herdr_dev develops the HUD here; read/edit/git come from ~/.dippy/config.
+# hud_dev develops the HUD here; read/edit/git/hcom come from ~/.dippy/config.
 allow python3 -m unittest *
 allow python3 -m pytest *
 allow python3 *.py *
 allow python3 ./** *
+allow python3 tests/run *
+allow python3 tests/run|
+allow python3 bin/herdr-blocked-hud *
 deny python3 ./tmp/** "Running scripts from tmp/ is not allowed: put the code in the project and run it from there"
+allow xvfb-run python3 tests/run *
+allow xvfb-run python3 tests/run|
+allow xvfb-run -a python3 tests/run *
+allow xvfb-run -a python3 tests/run|
+allow xvfb-run -a python3 -m unittest *
+allow hcom send @bin *
+allow hcom send @herdr_dev *
+deny python3 -m pip * "Installing packages is not allowed: bin installs released tags"
+deny pip * "Installing packages is not allowed: bin installs released tags"
+deny pip3 * "Installing packages is not allowed: bin installs released tags"
+deny pipx * "Installing packages is not allowed: bin installs released tags"
+deny uv * "Installing packages is not allowed: bin installs released tags"
+deny apt * "Installing packages is not allowed: bin installs released tags"
+deny apt-get * "Installing packages is not allowed: bin installs released tags"
+deny git push * "Pushing is not allowed: commit and tag locally only"
+deny git push| "Pushing is not allowed: commit and tag locally only"
+deny git remote add * "Adding or changing remotes is not allowed: work in the local repository only"
+deny git remote set-url * "Adding or changing remotes is not allowed: work in the local repository only"
+deny git worktree * "Git worktrees are not allowed: work in the main working tree"
+allow backlog *
 allow herdr pane list *
+allow herdr pane list|
+allow herdr pane get *
+allow herdr pane current *
+allow herdr pane current|
+allow herdr agent list *
+allow herdr agent list|
+allow herdr agent get *
+allow herdr workspace list *
+allow herdr workspace list|
+allow herdr tab list *
+allow herdr tab list|
+allow herdr status *
+allow herdr status|
+allow herdr --version|
+deny herdr server * "Controlling the Herdr server is not allowed: send the problem to herdr_dev"
+deny herdr config * "Changing the Herdr config is not allowed: send the problem to herdr_dev"
