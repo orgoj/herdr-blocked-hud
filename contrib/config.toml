@@ -9,9 +9,10 @@ poll_interval = 1.0
 # has a client, since a class cannot tell sessions apart. "" disables it.
 wm_class = "herdr.herdr"
 
-# Sound files played with paplay; "" disables that sound.
-blocked_sound = "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"
-done_sound = "/usr/share/sounds/freedesktop/stereo/complete.oga"
+# Sounds: "builtin" is the HUD's own sound (blocked and done differ), a
+# file path is played with paplay, "" disables that sound.
+blocked_sound = "builtin"
+done_sound = "builtin"
 
 # Placement on the primary monitor: top-right, top-left, bottom-right,
 # bottom-left; margins in pixels from that corner; window width in pixels.

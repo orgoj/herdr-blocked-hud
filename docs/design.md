@@ -283,6 +283,10 @@ one local session.
 2. **Sound: HUD-owned `paplay`.** Simplest: works without a foreground Herdr
    client and without Herdr config. If Herdr's own `[ui.sound]` request sound
    is also active, the user hears both; the HUD does not change Herdr config.
+   The default sounds are the HUD's own (`sounds.py`, generated WAV cached
+   in `$XDG_CACHE_HOME/herdr-blocked-hud/`): theme sounds such as
+   `dialog-warning.oga` could not be told apart from desktop notifications,
+   and blocked and done must sound different.
 3. **Long-done section: yes** — 60 s default, regex filter off by default,
    agents without a status line are reported, done sound switchable on its
    own (section 5).

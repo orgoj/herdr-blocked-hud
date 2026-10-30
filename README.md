@@ -38,7 +38,7 @@ CPython does.
 ```bash
 uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.3
 herdr-blocked-hud                 # run; a second instance exits with status 1
-herdr-blocked-hud --demo          # show sample rows for 8 s (check placement)
+herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
 ```
 
@@ -67,8 +67,8 @@ Unknown keys, wrong types and invalid regexes stop the HUD at startup.
 |---|---|---|
 | `poll_interval` | `1.0` | Seconds between polls |
 | `wm_class` | `"herdr.herdr"` | Exact `wmctrl -lx` class of the Herdr terminal window, used when the process tree finds none and no other session has a client; `""` disables |
-| `blocked_sound` | `dialog-warning.oga` | Blocked sound file; `""` disables |
-| `done_sound` | `complete.oga` | Done sound file; `""` disables |
+| `blocked_sound` | `"builtin"` | `"builtin"` (the HUD's own urgent two-tone call), a sound file for `paplay`, or `""` to disable |
+| `done_sound` | `"builtin"` | `"builtin"` (the HUD's own soft rising chime), a sound file, or `""` to disable |
 | `corner` | `"top-right"` | `top-right`, `top-left`, `bottom-right`, `bottom-left` of the primary monitor |
 | `margin_x`, `margin_y` | `24`, `36` | Pixels from that corner |
 | `width` | `320` | Window width in pixels (positive; margins must not be negative) |

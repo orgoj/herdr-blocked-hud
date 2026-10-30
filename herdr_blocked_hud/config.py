@@ -27,8 +27,9 @@ class Config:
     # Exact `wmctrl -lx` class used when the process tree finds no window;
     # empty disables the fallback.
     wm_class: str = "herdr.herdr"
-    blocked_sound: str = "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"
-    done_sound: str = "/usr/share/sounds/freedesktop/stereo/complete.oga"
+    # "builtin": the HUD's own sound; otherwise a file for paplay; "" is off.
+    blocked_sound: str = "builtin"
+    done_sound: str = "builtin"
     corner: str = "top-right"
     margin_x: int = 24
     margin_y: int = 36

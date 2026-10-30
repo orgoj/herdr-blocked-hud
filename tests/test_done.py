@@ -157,6 +157,22 @@ class SoundTests(unittest.TestCase):
         self.assertIsNone(sound_for(View(), on))
         self.assertIsNone(sound_for(View(beep_blocked=True), Config(blocked_sound="")))
 
+    def test_builtin_default_resolves_per_kind(self):
+        from herdr_blocked_hud.app import sound_for
+        from herdr_blocked_hud.config import Config
+        from herdr_blocked_hud.logic import View
+
+        def builtin(kind):
+            return f"/cache/{kind}.wav"
+
+        def unwritable(kind):
+            raise OSError("read-only")
+
+        default = Config()
+        self.assertEqual(sound_for(View(beep_blocked=True), default, builtin), "/cache/blocked.wav")
+        self.assertEqual(sound_for(View(beep_done=True), default, builtin), "/cache/done.wav")
+        self.assertIsNone(sound_for(View(beep_blocked=True), default, unwritable))
+
 
 if __name__ == "__main__":
     unittest.main()

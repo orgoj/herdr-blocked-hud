@@ -15,7 +15,7 @@ import traceback
 from typing import Callable
 
 from . import config as config_module
-from . import x11
+from . import sounds, x11
 from .config import Config, ConfigError
 from .focus import focus_agent
 from .logic import DoneTracker, HudState, LongDone, Row, View
@@ -43,13 +43,23 @@ def play(path: str) -> None:
         print(f"herdr-blocked-hud: paplay failed: {err}", file=sys.stderr)
 
 
-def sound_for(view: View, config: Config) -> str | None:
+def sound_for(
+    view: View, config: Config, builtin: Callable[[str], str] = sounds.builtin_path
+) -> str | None:
     """One sound per poll; blocked wins. The done switch leaves blocked alone."""
     if view.beep_blocked:
-        return config.blocked_sound or None
-    if view.beep_done and config.done.sound_enabled:
-        return config.done_sound or None
-    return None
+        kind, setting = "blocked", config.blocked_sound
+    elif view.beep_done and config.done.sound_enabled:
+        kind, setting = "done", config.done_sound
+    else:
+        return None
+    if setting == sounds.BUILTIN:
+        try:
+            return builtin(kind)
+        except OSError as err:
+            print(f"herdr-blocked-hud: cannot write {kind} sound: {err}", file=sys.stderr)
+            return None
+    return setting or None
 
 
 def place(
@@ -234,6 +244,11 @@ def main(argv: list[str] | None = None) -> int:
         model, long_done = demo_model()
         hud.submit(model, long_done)
         hud.start_draining()
+        # The first reading never beeps, so let the user hear both sounds here.
+        for delay, view in ((300, View(beep_blocked=True)), (2500, View(beep_done=True))):
+            sound = sound_for(view, config)
+            if sound:
+                root.after(delay, play, sound)
         root.after(8000, root.destroy)
     else:
         sessions: list[Session] = []
