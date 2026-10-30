@@ -61,8 +61,10 @@ adds it when it exists), as must `herdr`.
 To run from a checkout during development, without installing:
 `bin/herdr-blocked-hud` (or `python3 -m herdr_blocked_hud`).
 
-Releases: `bin/bump-version X.Y.Z` (sets `version` in `pyproject.toml` and the
-install tag above), run the tests, commit, and tag `vX.Y.Z`.
+Releases: before starting the work, `bin/bump-version X.Y.Z` (sets `version`
+in `pyproject.toml` and the install tag above), so a build run from the
+checkout is never mistaken for the installed release; then do the work, run
+the tests, commit, and tag `vX.Y.Z`.
 
 ## Configuration
 

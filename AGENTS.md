@@ -10,5 +10,6 @@ click, and hides itself when nothing is blocked.
   with the Tk tests (never on the real display):
   `xvfb-run -a env HUD_GUI_TESTS=1 python3 tests/run`.
 - Release: `bin/bump-version X.Y.Z` (pyproject.toml and the README install
-  tag), `python3 tests/run`, commit, annotated tag `vX.Y.Z`.
+  tag) before starting the work, then the work, `python3 tests/run`, commit,
+  annotated tag `vX.Y.Z`.
 - Temporary files only in `tmp/` (gitignored).
