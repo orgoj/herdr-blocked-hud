@@ -55,6 +55,9 @@ adds it when it exists), as must `herdr`.
 To run from a checkout during development, without installing:
 `bin/herdr-blocked-hud` (or `python3 -m herdr_blocked_hud`).
 
+Releases: `bin/bump-version X.Y.Z` (sets `version` in `pyproject.toml` and the
+install tag above), run the tests, commit, and tag `vX.Y.Z`.
+
 ## Configuration
 
 `~/.config/herdr-blocked-hud/config.toml` (respects `XDG_CONFIG_HOME`). Every
