@@ -24,8 +24,12 @@ the session name is shown only when more than one session runs.
 
 ## Install and run
 
+Install a tagged release as a uv tool (a copy, so work in the checkout does
+not affect the running HUD). The Python must include Tk; uv's managed
+CPython does.
+
 ```bash
-ln -s /path/to/herdr-blocked-hud/bin/herdr-blocked-hud ~/.local/bin/
+uv tool install --python 3.14 git+file:///path/to/herdr-blocked-hud@v0.1.0
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # show sample rows for 8 s (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -37,9 +41,14 @@ Start at LXQt login:
 cp contrib/herdr-blocked-hud.desktop ~/.config/autostart/
 ```
 
-The autostart entry runs `herdr-blocked-hud` from `PATH`; `~/.local/bin` must
-be on the session `PATH` (Ubuntu's `~/.profile` adds it when it exists), as
-must `herdr`.
+The autostart entry runs `herdr-blocked-hud` from `PATH`; `~/.local/bin` (where
+uv puts tool commands) must be on the session `PATH` (Ubuntu's `~/.profile`
+adds it when it exists), as must `herdr`.
+
+To run from a checkout during development, without installing:
+`bin/herdr-blocked-hud` (or `python3 -m herdr_blocked_hud`).
+
+Releases: bump `version` in `pyproject.toml`, commit, and tag `v<version>`.
 
 ## Configuration
 

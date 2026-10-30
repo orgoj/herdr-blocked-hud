@@ -199,7 +199,10 @@ def demo_model() -> tuple[Model, tuple[LongDone, ...]]:
 USAGE = "usage: herdr-blocked-hud [--demo] [--check-config]"
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list[str] | None = None) -> int:
+    """Entry point; the console script calls it without arguments."""
+    if argv is None:
+        argv = sys.argv[1:]
     if any(arg not in ("--demo", "--check-config") for arg in argv):
         print(USAGE, file=sys.stderr)
         return 2

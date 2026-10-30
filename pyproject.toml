@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling==1.33.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "herdr-blocked-hud"
+version = "0.1.0"
+description = "Always-on-top X11 HUD for blocked and long-done Herdr agents"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+herdr-blocked-hud = "herdr_blocked_hud.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["herdr_blocked_hud"]
