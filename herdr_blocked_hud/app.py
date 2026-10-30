@@ -63,21 +63,13 @@ def place(
     return left, top
 
 
-def viewed_for(model: Model) -> set[str]:
-    """Sessions the user is looking at; X11 is queried only when it matters."""
-    if not any(a.focused for a in model.agents_with_status("blocked")):
-        return set()
-    sessions = [state.session for state in model.sessions]
-    return x11.viewed_sessions(x11.active_window_pid(), x11.ui_clients(sessions))
-
-
 class Hud:
     def __init__(self, root: tk.Tk, on_click: Callable[[Agent], None], config: Config):
         self.root = root
         self.on_click = on_click
         self.config = config
         self.state = HudState()
-        self.models: queue.Queue[tuple[Model, set[str], tuple[LongDone, ...]]] = queue.Queue()
+        self.models: queue.Queue[tuple[Model, tuple[LongDone, ...]]] = queue.Queue()
         self.shown: View | None = None
 
         # Override-redirect: Openbox neither manages nor focuses the window,
@@ -91,11 +83,9 @@ class Hud:
             0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
         )
 
-    def submit(
-        self, model: Model, viewed: set[str], long_done: tuple[LongDone, ...] = ()
-    ) -> None:
+    def submit(self, model: Model, long_done: tuple[LongDone, ...] = ()) -> None:
         """Thread-safe: queue a model for the Tk main loop."""
-        self.models.put((model, viewed, long_done))
+        self.models.put((model, long_done))
 
     def start_draining(self) -> None:
         latest = None
@@ -242,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     if "--demo" in argv:
         hud = Hud(root, on_click=lambda agent: None, config=config)
         model, long_done = demo_model()
-        hud.submit(model, set(), long_done)
+        hud.submit(model, long_done)
         hud.start_draining()
         root.after(8000, root.destroy)
     else:
@@ -251,18 +241,13 @@ def main(argv: list[str] | None = None) -> int:
 
         def on_model(model: Model) -> None:
             sessions[:] = [state.session for state in model.sessions]
-            # Extras fail soft: the blocked rows must still reach the window.
-            try:
-                viewed = viewed_for(model)
-            except Exception:
-                traceback.print_exc()
-                viewed = set()
+            # The done section fails soft: the blocked rows must still reach the window.
             try:
                 long_done = tracker.update(model)
             except Exception:
                 traceback.print_exc()
                 long_done = ()
-            hud.submit(model, viewed, long_done)
+            hud.submit(model, long_done)
 
         poller = Poller(on_model, interval=config.poll_interval)
 

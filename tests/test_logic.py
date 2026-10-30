@@ -27,38 +27,30 @@ class HudStateTests(unittest.TestCase):
         self.hud = HudState()
 
     def test_no_beep_for_panes_blocked_at_start(self):
-        view = self.hud.update(model(agent("a")), set())
+        view = self.hud.update(model(agent("a")))
         self.assertFalse(view.beep_blocked)
         self.assertEqual([r.text for r in view.blocked], ["api · main · claude"])
 
     def test_beeps_once_when_pane_becomes_blocked(self):
-        self.hud.update(model(agent("a", "working")), set())
-        self.assertTrue(self.hud.update(model(agent("a"), agent("b")), set()).beep_blocked)
-        self.assertFalse(self.hud.update(model(agent("a"), agent("b")), set()).beep_blocked)
+        self.hud.update(model(agent("a", "working")))
+        self.assertTrue(self.hud.update(model(agent("a"), agent("b"))).beep_blocked)
+        self.assertFalse(self.hud.update(model(agent("a"), agent("b"))).beep_blocked)
 
     def test_hidden_when_nothing_blocked(self):
-        view = self.hud.update(model(agent("a", "working"), agent("b", "done")), set())
+        view = self.hud.update(model(agent("a", "working"), agent("b", "done")))
         self.assertEqual(view.blocked, ())
         self.assertFalse(view.visible)
 
-    def test_viewed_pane_is_hidden_and_silent_then_returns_without_beep(self):
-        self.hud.update(model(agent("a", "working", focused=True)), set())
-        viewed = self.hud.update(model(agent("a", focused=True)), {"default"})
-        self.assertFalse(viewed.beep_blocked)
-        self.assertFalse(viewed.visible)
-        back = self.hud.update(model(agent("a", focused=True)), set())
-        self.assertFalse(back.beep_blocked)
-        self.assertEqual(len(back.blocked), 1)
-
-    def test_focused_pane_in_unviewed_session_stays_visible(self):
-        self.hud.update(model(agent("a", "working", focused=True)), set())
-        view = self.hud.update(model(agent("a", focused=True)), {"work"})
+    def test_focused_pane_is_listed_and_beeps(self):
+        self.hud.update(model(agent("a", "working", focused=True)))
+        view = self.hud.update(model(agent("a", focused=True)))
         self.assertTrue(view.beep_blocked)
         self.assertEqual(len(view.blocked), 1)
+        self.assertTrue(view.visible)
 
     def test_session_name_shown_only_with_several_sessions(self):
         both = (DEFAULT, WORK)
-        view = self.hud.update(model(agent("a"), agent("b", session="work"), sessions=both), set())
+        view = self.hud.update(model(agent("a"), agent("b", session="work"), sessions=both))
         self.assertEqual(
             [r.text for r in view.blocked],
             ["default · api · main · claude", "work · api · main · claude"],
@@ -67,27 +59,27 @@ class HudStateTests(unittest.TestCase):
     def test_error_row_after_consecutive_failed_polls(self):
         down = Model(error="herdr session list exited 1")
         for _ in range(ERROR_POLLS - 1):
-            self.assertIsNone(self.hud.update(down, set()).error)
-        view = self.hud.update(down, set())
+            self.assertIsNone(self.hud.update(down).error)
+        view = self.hud.update(down)
         self.assertEqual(view.error, "herdr session list exited 1")
         self.assertTrue(view.visible)
-        self.assertIsNone(self.hud.update(model(), set()).error)
+        self.assertIsNone(self.hud.update(model()).error)
 
     def test_unreachable_session_recovery_does_not_rebeep(self):
         both = (DEFAULT, WORK)
-        self.hud.update(model(agent("b", session="work"), sessions=both), set())
-        self.hud.update(model(sessions=both, failed=("work",)), set())
-        view = self.hud.update(model(agent("b", session="work"), sessions=both), set())
+        self.hud.update(model(agent("b", session="work"), sessions=both))
+        self.hud.update(model(sessions=both, failed=("work",)))
+        view = self.hud.update(model(agent("b", session="work"), sessions=both))
         self.assertFalse(view.beep_blocked)
 
     def test_session_list_failure_keeps_known_panes(self):
-        self.hud.update(model(agent("a")), set())
-        self.hud.update(Model(error="down"), set())
-        self.assertFalse(self.hud.update(model(agent("a")), set()).beep_blocked)
+        self.hud.update(model(agent("a")))
+        self.hud.update(Model(error="down"))
+        self.assertFalse(self.hud.update(model(agent("a"))).beep_blocked)
 
     def test_baseline_waits_for_a_clean_poll(self):
-        self.hud.update(Model(error="down"), set())
-        self.assertFalse(self.hud.update(model(agent("a")), set()).beep_blocked)
+        self.hud.update(Model(error="down"))
+        self.assertFalse(self.hud.update(model(agent("a"))).beep_blocked)
 
 
 if __name__ == "__main__":

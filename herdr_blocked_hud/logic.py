@@ -59,8 +59,8 @@ def elapsed_text(seconds: float) -> str:
 class HudState:
     """Turns successive Models into Views.
 
-    A pane counts as viewed (hidden, silent) while it is focused in its
-    session and that session's Herdr window is the active X11 window.
+    Every blocked pane is listed, also the one the user looks at: an active
+    Herdr window does not mean the user sees its prompt.
     """
 
     _known_blocked: set[tuple[str, str]] | None = None
@@ -70,7 +70,6 @@ class HudState:
     def update(
         self,
         model: Model,
-        viewed_sessions: set[str],
         long_done: tuple[LongDone, ...] = (),
     ) -> View:
         errors = model.errors
@@ -90,10 +89,7 @@ class HudState:
             if not errors:
                 self._known_blocked = current
         else:
-            new = current - self._known_blocked
-            beep = any(
-                agent_key(a) in new and not _viewed(a, viewed_sessions) for a in blocked
-            )
+            beep = bool(current - self._known_blocked)
             if failed is None:
                 kept = self._known_blocked
             else:
@@ -106,11 +102,7 @@ class HudState:
         self._known_done = done_keys
 
         show_session = len({s.session.name for s in model.sessions}) > 1
-        rows = tuple(
-            Row(a, row_text(a, show_session))
-            for a in blocked
-            if not _viewed(a, viewed_sessions)
-        )
+        rows = tuple(Row(a, row_text(a, show_session)) for a in blocked)
         done_rows = tuple(
             Row(d.agent, f"{row_text(d.agent, show_session)} · {elapsed_text(d.seconds)}")
             for d in sorted(long_done, key=lambda d: -d.seconds)
@@ -122,10 +114,6 @@ class HudState:
             beep_blocked=beep,
             beep_done=beep_done,
         )
-
-
-def _viewed(agent: Agent, viewed_sessions: set[str]) -> bool:
-    return agent.focused and agent.session in viewed_sessions
 
 
 def done_key(agent: Agent) -> tuple[str, str, int | None]:

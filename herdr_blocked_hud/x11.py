@@ -151,22 +151,6 @@ def ancestors(pid: int, parent_of: Callable[[int], int | None] = parent_pid) -> 
     return chain
 
 
-def active_window_pid() -> int | None:
-    try:
-        result = subprocess.run(
-            ["xdotool", "getactivewindow", "getwindowpid"],
-            capture_output=True,
-            text=True,
-            timeout=TOOL_TIMEOUT_S,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    try:
-        return int(result.stdout.strip()) if result.returncode == 0 else None
-    except ValueError:
-        return None
-
-
 @dataclass(frozen=True)
 class Window:
     wid: str
@@ -270,18 +254,3 @@ def parse_primary_monitor(listing: str) -> tuple[int, int, int, int] | None:
             return geometry
         first = first or geometry
     return first
-
-
-def viewed_sessions(
-    window_pid: int | None,
-    clients: dict[str, list[int]],
-    parent_of: Callable[[int], int | None] = parent_pid,
-) -> set[str]:
-    """Sessions whose Herdr UI client lives in the window owned by `window_pid`."""
-    if window_pid is None:
-        return set()
-    return {
-        name
-        for name, pids in clients.items()
-        if any(window_pid in ancestors(pid, parent_of) for pid in pids)
-    }

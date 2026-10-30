@@ -70,14 +70,6 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(x11.ancestors(5992, PARENTS.get), [5992, 5893, 5264])
         self.assertEqual(x11.ancestors(1, {1: 2, 2: 1}.get), [1, 2])
 
-    def test_viewed_sessions(self):
-        clients = {"default": [5992], "work": [7001]}
-        self.assertEqual(x11.viewed_sessions(5893, clients, PARENTS.get), {"default"})
-        self.assertEqual(x11.viewed_sessions(7000, clients, PARENTS.get), {"work"})
-        self.assertEqual(x11.viewed_sessions(4242, clients, PARENTS.get), set())
-        self.assertEqual(x11.viewed_sessions(None, clients, PARENTS.get), set())
-
-
 WMCTRL = """\
 0x04400003  0 5900   google-chrome.Google-chrome  host herdr - GitHub - Google Chrome
 0x04200003  0 5893   herdr.herdr           host ▶ herdr_dev - herdr

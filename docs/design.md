@@ -288,12 +288,11 @@ one local session.
    own (section 5).
 4. **Several Herdr windows: raise the first match.**
 5. **Latency: 1 s polling is acceptable**; no plugin wake-up (option C).
-6. **Hide the row the user is looking at.** A row is hidden (and does not
-   beep) while its pane is `focused` in its session **and** the X11 active
-   window (`_NET_ACTIVE_WINDOW`, `xdotool getactivewindow`) is that session's
-   Herdr host window. When the user switches away it reappears without a
-   beep. `done` panes need no extra rule: viewing them marks them seen and
-   they leave `done`.
+6. **Never hide a blocked row.** Every blocked pane is listed and beeps when
+   it becomes blocked, also while it is focused in the active Herdr window:
+   an active window does not mean the user sees the prompt (an earlier rule
+   that hid such rows silenced a real block). `done` panes need no rule:
+   Herdr clears `done` when the pane is focused.
 7. **Click on a row whose agent is gone: do nothing, refresh.** When
    `agent focus` fails, no tab focus and no window raise; the HUD re-polls
    immediately.

@@ -126,9 +126,9 @@ class DoneViewTests(unittest.TestCase):
         hud = HudState()
         m = model(agent("a"), agent("b"))
         a, b = m.sessions[0].agents
-        empty = hud.update(m, set(), ())
+        empty = hud.update(m, ())
         self.assertFalse(empty.visible)
-        view = hud.update(m, set(), (LongDone(a, 65), LongDone(b, 3700)))
+        view = hud.update(m, (LongDone(a, 65), LongDone(b, 3700)))
         self.assertTrue(view.beep_done)
         self.assertFalse(view.beep_blocked)
         self.assertEqual(
@@ -136,9 +136,9 @@ class DoneViewTests(unittest.TestCase):
             ["api · main · claude · 1h01m", "api · main · claude · 1m"],
         )
         self.assertTrue(view.visible)
-        again = hud.update(m, set(), (LongDone(a, 66), LongDone(b, 3701)))
+        again = hud.update(m, (LongDone(a, 66), LongDone(b, 3701)))
         self.assertFalse(again.beep_done)
-        self.assertFalse(hud.update(m, set(), ()).visible)
+        self.assertFalse(hud.update(m, ()).visible)
 
 
 class SoundTests(unittest.TestCase):

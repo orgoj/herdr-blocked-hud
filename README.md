@@ -16,9 +16,9 @@ you:
   `done.after_seconds` (default 60 s). A separate, switchable sound plays.
 
 Click a row to focus that pane in Herdr and raise its terminal window. The
-window disappears when nothing is listed. Rows for the pane you are looking
-at (focused in the active Herdr window) are hidden. If Herdr cannot be
-reached for three polls, a grey error row appears.
+window disappears when nothing is listed. A blocked pane stays listed until
+it is no longer blocked, even while it is on screen in Herdr. If Herdr
+cannot be reached for three polls, a grey error row appears.
 
 All running local Herdr sessions are watched (`herdr session list --json`);
 the session name is shown only when more than one session runs.
@@ -26,7 +26,7 @@ the session name is shown only when more than one session runs.
 ## Requirements
 
 - Python 3.11+ with Tk (`python3-tk`), no other Python packages
-- `herdr` on `PATH`, X11 with `wmctrl`, `xdotool`, `xrandr`, and `paplay`
+- `herdr` on `PATH`, X11 with `wmctrl`, `xrandr`, and `paplay`
 - Tested only on Lubuntu (LXQt + Openbox) with Herdr 0.9.5
 
 ## Install and run
