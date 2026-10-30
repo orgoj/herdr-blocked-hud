@@ -188,14 +188,16 @@ def acquire_single_instance() -> object | None:
 def quit_on_sigint(root: tk.Misc) -> threading.Event:
     """Ctrl+C leaves the main loop instead of raising KeyboardInterrupt in Tk.
 
-    The handler runs between Python bytecodes, i.e. inside the drain callback,
-    so it only asks Tk to stop. The returned event tells main() it happened.
+    The handler runs between Python bytecodes, so it only asks Tk to stop. It
+    schedules the quit as an idle callback: entering mainloop() resets Tk's
+    quit flag, so a direct quit() during startup would be lost. The returned
+    event tells main() it happened.
     """
     interrupted = threading.Event()
 
     def handler(_signum: int, _frame: object) -> None:
         interrupted.set()
-        root.quit()
+        root.after_idle(root.quit)
 
     signal.signal(signal.SIGINT, handler)
     return interrupted

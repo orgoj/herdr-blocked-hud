@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@herdr_dev'
 created_date: '2026-10-30 12:54'
-updated_date: '2026-10-30 13:45'
+updated_date: '2026-10-30 13:48'
 labels: []
 dependencies: []
 type: bug
@@ -23,6 +23,12 @@ Ctrl+C in the terminal running herdr-blocked-hud prints a KeyboardInterrupt trac
 - [x] #1 Ctrl+C (SIGINT) leaves the Tk main loop and the process exits with status 130 without a traceback
 - [x] #2 A unit test covers that the SIGINT handler stops the main loop
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Review fix (agent_review): the handler schedules root.quit via after_idle, since entering mainloop resets Tk's quit flag and a startup-time Ctrl+C was lost. Verified: tests/run 69 OK; real Tk with SIGINT before mainloop leaves the loop; live --demo SIGINT -> rc 130, no output.
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
