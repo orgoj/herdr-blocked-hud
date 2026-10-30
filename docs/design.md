@@ -215,8 +215,9 @@ that stay `done` (finished, not yet seen) longer than a threshold.
 - The row disappears when the pane leaves `done`: user views it (server marks
   seen → `idle`), clicks it (`agent focus` marks seen), or the agent works
   again.
-- Sound when a row enters the section: separate `done.sound`, default a
-  quieter sound than blocked; empty disables it.
+- Sound when a row enters the section: own switch `done.sound_enabled`
+  (default `true`) and file `done.sound`, default a quieter sound than
+  blocked. Turning it off leaves the blocked sound untouched.
 - Click: same as blocked (focus pane, raise window).
 
 Optional reply filter, **default off** (empty list = every long-done agent is
@@ -225,6 +226,7 @@ reported):
 ```toml
 [done]
 after_seconds = 60
+sound_enabled = true           # independent of the blocked sound
 # Bottom-most line matching this regex is the agent's final status line.
 status_line_regex = '^\s*STATUS:'
 # Do not report the agent when its status line matches any of these.
@@ -238,7 +240,7 @@ read_lines = 80                # recent rows read once per completion
   ignore regexes anywhere in the read window would be wrong: a short reply
   without a status block, or one ending `STATUS: NEEDS_USER`, still has the
   previous turn's `STATUS: DONE` higher up in the scrollback.
-- No status line found, or the read fails → report (fail open).
+- No status line found, or the read fails → report (fail open; decided).
 - Agent TUIs draw their prompt box below the reply; the status line is above
   it, inside the last 80 rows unless the reply's tail is very long.
 - A regex that does not compile is a startup config error, not a silent skip.
@@ -254,9 +256,9 @@ read_lines = 80                # recent rows read once per completion
 2. Sound: HUD-owned `paplay` sound, or rely on Herdr's own `[ui.sound]
    request_path`, which plays through the foreground client? Both would
    double-beep; Herdr's may be suppressed for the active tab.
-3. Long-done section (decided: yes, 60 s default, regex filter off by
-   default): should the done sound default to on or off, and should
-   `ignore_regexes` also hide agents with no status line at all?
+3. Long-done section: decided (60 s default, regex filter off by default,
+   agents without a status line are reported, done sound switchable on its
+   own).
 4. Several Herdr windows: raise the first, all, or ask?
 5. Is the 1 s latency acceptable, or is the plugin wake-up (option C) wanted
    from the start?
