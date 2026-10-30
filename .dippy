@@ -1,0 +1,7 @@
+# herdr_dev develops the HUD here; read/edit/git come from ~/.dippy/config.
+allow python3 -m unittest *
+allow python3 -m pytest *
+allow python3 *.py *
+allow python3 ./** *
+deny python3 ./tmp/** "Running scripts from tmp/ is not allowed: put the code in the project and run it from there"
+allow herdr pane list *
