@@ -36,7 +36,7 @@ not affect the running HUD). The Python must include Tk; uv's managed
 CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.2
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.3
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # show sample rows for 8 s (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
