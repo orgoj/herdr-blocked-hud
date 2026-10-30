@@ -1,0 +1,33 @@
+# herdr-blocked-hud settings: ~/.config/herdr-blocked-hud/config.toml
+# Every key is optional; the values below are the defaults.
+
+# Seconds between polls of the Herdr sessions.
+poll_interval = 1.0
+
+# Exact `wmctrl -lx` class of the Herdr terminal window, used when the
+# process tree finds no window (e.g. a terminal mux). "" disables it.
+wm_class = "herdr.herdr"
+
+# Sound files played with paplay; "" disables that sound.
+blocked_sound = "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"
+done_sound = "/usr/share/sounds/freedesktop/stereo/complete.oga"
+
+# Placement on the primary monitor: top-right, top-left, bottom-right,
+# bottom-left; margins in pixels from that corner; window width in pixels.
+corner = "top-right"
+margin_x = 24
+margin_y = 36
+width = 320
+
+[done]
+# List agents that stay done (finished, not yet viewed) this many seconds.
+after_seconds = 60
+# Play done_sound when an agent enters the Done section.
+sound_enabled = true
+# The bottom-most line matching this regex is the agent's status line.
+status_line_regex = '^\s*STATUS:'
+# Hide an agent whose status line matches any of these regexes.
+# Empty: every long-done agent is listed. Example: ['STATUS:\s*DONE\s*$']
+ignore_regexes = []
+# Rendered rows read from the agent's pane (once per completion).
+read_lines = 80

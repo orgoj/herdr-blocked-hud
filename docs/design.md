@@ -249,8 +249,10 @@ read_lines = 80                # recent rows read once per completion
   it, inside the last 80 rows unless the reply's tail is very long.
 - A regex that does not compile is a startup config error, not a silent skip.
 - Single instance: lock file in `$XDG_RUNTIME_DIR`.
-- Config: small TOML/INI in `~/.config/herdr-blocked-hud/` — socket/session,
-  window class, sound file, position, poll interval.
+- Config: `~/.config/herdr-blocked-hud/config.toml` (stdlib `tomllib`) —
+  window class, sounds, position, poll interval, done options; keys and
+  defaults in README.md and `contrib/config.toml`. Sessions are discovered,
+  not configured.
 
 ## 6. Decisions (user)
 

@@ -143,14 +143,19 @@ class DoneViewTests(unittest.TestCase):
 
 class SoundTests(unittest.TestCase):
     def test_done_switch_is_independent_of_blocked(self):
-        from herdr_blocked_hud.app import BLOCKED_SOUND, DONE_SOUND, sound_for
+        from herdr_blocked_hud.app import sound_for
+        from herdr_blocked_hud.config import Config
         from herdr_blocked_hud.logic import View
 
-        self.assertEqual(sound_for(View(beep_done=True), True), DONE_SOUND)
-        self.assertIsNone(sound_for(View(beep_done=True), False))
-        self.assertEqual(sound_for(View(beep_blocked=True), False), BLOCKED_SOUND)
-        self.assertEqual(sound_for(View(beep_blocked=True, beep_done=True), True), BLOCKED_SOUND)
-        self.assertIsNone(sound_for(View(), True))
+        on = Config(blocked_sound="b.oga", done_sound="d.oga")
+        off = Config(blocked_sound="b.oga", done_sound="d.oga",
+                     done=DoneConfig(sound_enabled=False))
+        self.assertEqual(sound_for(View(beep_done=True), on), "d.oga")
+        self.assertIsNone(sound_for(View(beep_done=True), off))
+        self.assertEqual(sound_for(View(beep_blocked=True), off), "b.oga")
+        self.assertEqual(sound_for(View(beep_blocked=True, beep_done=True), on), "b.oga")
+        self.assertIsNone(sound_for(View(), on))
+        self.assertIsNone(sound_for(View(beep_blocked=True), Config(blocked_sound="")))
 
 
 if __name__ == "__main__":

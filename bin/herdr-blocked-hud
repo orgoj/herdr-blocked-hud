@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Launcher; symlink it into a PATH directory such as ~/.local/bin."""
+
+import os
+import sys
+
+# Resolve the symlink so the package next to this repository is imported.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
+from herdr_blocked_hud.app import main  # noqa: E402
+
+sys.exit(main(sys.argv[1:]))

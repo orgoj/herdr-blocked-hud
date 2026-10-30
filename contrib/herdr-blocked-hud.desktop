@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Herdr Blocked HUD
+Comment=Always-on-top list of blocked and long-done Herdr agents
+Exec=herdr-blocked-hud
+Terminal=false
+X-LXQt-Need-Tray=false

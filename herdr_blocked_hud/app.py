@@ -12,16 +12,14 @@ import time
 import tkinter as tk
 from typing import Callable
 
+from . import config as config_module
 from . import x11
+from .config import Config, ConfigError
 from .focus import focus_agent
-from .logic import DoneConfig, DoneTracker, HudState, LongDone, Row, View
+from .logic import DoneTracker, HudState, LongDone, Row, View
 from .source import Agent, Model, Poller, Session, SessionState, read_agent_tail
 
-BLOCKED_SOUND = "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga"
-DONE_SOUND = "/usr/share/sounds/freedesktop/stereo/complete.oga"
 DRAIN_MS = 100
-WIDTH = 320
-MARGIN = 24
 
 BG = "#1e1e2e"
 ROW_BG = "#313244"
@@ -43,13 +41,24 @@ def play(path: str) -> None:
         print(f"herdr-blocked-hud: paplay failed: {err}", file=sys.stderr)
 
 
-def sound_for(view: View, done_sound_enabled: bool) -> str | None:
+def sound_for(view: View, config: Config) -> str | None:
     """One sound per poll; blocked wins. The done switch leaves blocked alone."""
     if view.beep_blocked:
-        return BLOCKED_SOUND
-    if view.beep_done and done_sound_enabled:
-        return DONE_SOUND
+        return config.blocked_sound or None
+    if view.beep_done and config.done.sound_enabled:
+        return config.done_sound or None
     return None
+
+
+def place(
+    monitor: tuple[int, int, int, int], config: Config, height: int
+) -> tuple[int, int]:
+    """Top-left corner of the HUD in the configured monitor corner."""
+    x, y, width, monitor_height = monitor
+    vertical, horizontal = config.corner.split("-")
+    left = x + config.margin_x if horizontal == "left" else x + width - config.width - config.margin_x
+    top = y + config.margin_y if vertical == "top" else y + monitor_height - height - config.margin_y
+    return left, top
 
 
 def viewed_for(model: Model) -> set[str]:
@@ -61,12 +70,10 @@ def viewed_for(model: Model) -> set[str]:
 
 
 class Hud:
-    def __init__(
-        self, root: tk.Tk, on_click: Callable[[Agent], None], done_sound_enabled: bool = True
-    ):
+    def __init__(self, root: tk.Tk, on_click: Callable[[Agent], None], config: Config):
         self.root = root
         self.on_click = on_click
-        self.done_sound_enabled = done_sound_enabled
+        self.config = config
         self.state = HudState()
         self.models: queue.Queue[tuple[Model, set[str], tuple[LongDone, ...]]] = queue.Queue()
         self.shown: View | None = None
@@ -78,8 +85,9 @@ class Hud:
         root.withdraw()
         self.frame = tk.Frame(root, bg=BG, padx=6, pady=6)
         self.frame.pack(fill=tk.BOTH, expand=True)
-        monitor = x11.primary_monitor() or (0, 0, root.winfo_screenwidth(), 0)
-        self.origin = (monitor[0] + monitor[2] - WIDTH - MARGIN, monitor[1] + MARGIN + 12)
+        self.monitor = x11.primary_monitor() or (
+            0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
+        )
 
     def submit(
         self, model: Model, viewed: set[str], long_done: tuple[LongDone, ...] = ()
@@ -99,7 +107,7 @@ class Hud:
         self.root.after(DRAIN_MS, self.start_draining)
 
     def show(self, view: View) -> None:
-        sound = sound_for(view, self.done_sound_enabled)
+        sound = sound_for(view, self.config)
         if sound:
             play(sound)
         if not view.visible:
@@ -131,13 +139,14 @@ class Hud:
                 text=f"herdr unreachable: {view.error}",
                 bg=BG,
                 fg=ERROR_FG,
-                wraplength=WIDTH - 20,
+                wraplength=self.config.width - 20,
                 justify=tk.LEFT,
                 anchor="w",
             ).pack(fill=tk.X, pady=2)
         self.root.update_idletasks()
         height = self.frame.winfo_reqheight()
-        self.root.geometry(f"{WIDTH}x{height}+{self.origin[0]}+{self.origin[1]}")
+        left, top = place(self.monitor, self.config, height)
+        self.root.geometry(f"{self.config.width}x{height}+{left}+{top}")
 
     def header(self, text: str) -> None:
         tk.Label(
@@ -186,39 +195,51 @@ def demo_model() -> tuple[Model, tuple[LongDone, ...]]:
     return Model(sessions=(SessionState(session, agents=agents),)), (LongDone(agents[2], 185),)
 
 
+USAGE = "usage: herdr-blocked-hud [--demo] [--check-config]"
+
+
 def main(argv: list[str]) -> int:
-    demo = "--demo" in argv
+    if any(arg not in ("--demo", "--check-config") for arg in argv):
+        print(USAGE, file=sys.stderr)
+        return 2
+    try:
+        config = config_module.load()
+    except ConfigError as err:
+        print(f"herdr-blocked-hud: config error: {err}", file=sys.stderr)
+        return 2
+    if "--check-config" in argv:
+        print(f"herdr-blocked-hud: config ok ({config_module.config_path()})")
+        return 0
     lock = acquire_single_instance()
     if lock is None:
         print("herdr-blocked-hud: already running", file=sys.stderr)
         return 1
-    done_config = DoneConfig()
     root = tk.Tk(className="herdr-blocked-hud")
-    if demo:
-        hud = Hud(root, on_click=lambda agent: None)
+    if "--demo" in argv:
+        hud = Hud(root, on_click=lambda agent: None, config=config)
         model, long_done = demo_model()
         hud.submit(model, set(), long_done)
         hud.start_draining()
         root.after(8000, root.destroy)
     else:
         sessions: list[Session] = []
-        tracker = DoneTracker(done_config, read_agent_tail, time.monotonic)
+        tracker = DoneTracker(config.done, read_agent_tail, time.monotonic)
 
         def on_model(model: Model) -> None:
             sessions[:] = [state.session for state in model.sessions]
             hud.submit(model, viewed_for(model), tracker.update(model))
 
-        poller = Poller(on_model)
+        poller = Poller(on_model, interval=config.poll_interval)
 
         def on_click(agent: Agent) -> None:
             def work() -> None:
-                focus_agent(agent, list(sessions))
+                focus_agent(agent, list(sessions), config.wm_class or None)
                 # Refresh at once: the row goes away, or the gone agent drops out.
                 poller.poll_now()
 
             threading.Thread(target=work, name="herdr-focus", daemon=True).start()
 
-        hud = Hud(root, on_click=on_click, done_sound_enabled=done_config.sound_enabled)
+        hud = Hud(root, on_click=on_click, config=config)
         poller.start()
         hud.start_draining()
     root.mainloop()
