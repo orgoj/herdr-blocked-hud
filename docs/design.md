@@ -70,8 +70,8 @@ it is simpler and correct. Events can be added later as a latency optimization
   hosting the agent. On success the server focuses the pane and moves **all
   attached TUI clients** to it (`focus_all_shell_clients_on_default_target`),
   and marks `done` as seen. Fails when the pane no longer hosts an agent
-  (race: agent exited between poll and click) — fall back to
-  `herdr tab focus <tab_id>` and refresh.
+  (race: agent exited between poll and click) — then the HUD does nothing and
+  re-polls (decision 7).
 - `herdr pane focus` only accepts `--direction`; there is no CLI pane focus by
   id.
 - Herdr does not know or expose the outer terminal's X11 window.
@@ -149,7 +149,7 @@ panes (agents change state often). Do only if 1 s latency bothers the user.
 
 A, implemented as one small Python file plus tests for the pure parts (state
 diff, beep decision, label formatting, window-matching over a fixture of
-`wmctrl -lp` output and a process table). C later if wanted. Upstream
+`wmctrl -lp` output and a process table). No option C (decision 5). Upstream
 proposals from B only on Michael's request.
 
 ## 3. Click-to-focus on X11
@@ -158,8 +158,9 @@ Order: `agent focus` first (switches Herdr's view), then raise the window.
 
 Window resolution, most to least precise:
 
-1. **Process tree → `_NET_WM_PID`.** Find Herdr TUI client processes
-   (`/proc/*/comm == herdr`, excluding the `herdr server` process), walk
+1. **Process tree → `_NET_WM_PID`.** Find Herdr TUI client processes of the
+   row's session (argv `herdr` or `herdr -…`, not `herdr server` or CLI
+   subcommands; session filter in decision 1), walk
    `PPid` from `/proc/<pid>/status` up to an ancestor whose pid owns a
    top-level window in `wmctrl -lp`, then `wmctrl -i -a <wid>` (Openbox
    switches desktop and raises). Verified here: client 5992 → parent
@@ -177,8 +178,8 @@ Limits:
   tmux around herdr) break the pid chain: the client's ancestor is the mux
   server, not the GUI. Then only method 2 works.
 - With several attached clients (several windows), `agent focus` moves all of
-  them; the HUD should raise the most recently active one. Herdr does not
-  expose which; fall back to the first match, or raise all (open question).
+  them. Herdr does not expose the most recently active one; the HUD raises
+  the first match (decision 4).
 - Raising does not select an outer terminal tab if herdr runs in one tab of a
   multi-tab terminal.
 
@@ -248,21 +249,45 @@ read_lines = 80                # recent rows read once per completion
 - Config: small TOML/INI in `~/.config/herdr-blocked-hud/` — socket/session,
   window class, sound file, position, poll interval.
 
-## 6. Open questions for the user
+## 6. Decisions (user)
 
-1. Sessions/machines: only the default local session, or also named sessions
-   (`--session`) and remote machines (`herdr --machine …`)? Remote panes cannot
-   raise a local window the same way.
-2. Sound: HUD-owned `paplay` sound, or rely on Herdr's own `[ui.sound]
-   request_path`, which plays through the foreground client? Both would
-   double-beep; Herdr's may be suppressed for the active tab.
-3. Long-done section: decided (60 s default, regex filter off by default,
+Scope: a prototype for this Linux machine (LXQt/Openbox, X11). The user runs
+one local session.
+
+1. **Sessions: all local sessions, no remote machines.** The cost is small, so
+   the prototype handles every local session:
+   - Discover sessions with `herdr session list --json` (verified:
+     `sessions[]` with `name`, `default`, `running`, `socket_path`); poll each
+     `running` session's socket. Re-read the list every ~10 s.
+   - Rows show the session name only when more than one session runs.
+   - Focus with `herdr --session <name> agent focus <pane>` (or that
+     session's socket).
+   - Window raise per session: a UI client belongs to session `<name>` when
+     its argv has `--session <name>` or its `/proc/<pid>/environ` has
+     `HERDR_SESSION=<name>` / `HERDR_SOCKET_PATH=<socket>`; otherwise default.
+     Only that session's clients are walked up to a window.
+   - Comparison: `quinnjr/herdr-notifications` gets session scoping for free
+     because it is a Herdr plugin (each server runs its event hook, and its
+     `herdr` calls inherit that server's environment). Its window raise is not
+     session-aware: it takes the first process whose argv looks like a Herdr UI
+     client (`herdr` or `herdr -…`), walks parents and uses
+     `xdotool search --pid`. The HUD reuses that pid-walk, adds the session
+     filter above.
+   - Remote machines (`--machine`) are out of scope.
+2. **Sound: HUD-owned `paplay`.** Simplest: works without a foreground Herdr
+   client and without Herdr config. If Herdr's own `[ui.sound]` request sound
+   is also active, the user hears both; the HUD does not change Herdr config.
+3. **Long-done section: yes** — 60 s default, regex filter off by default,
    agents without a status line are reported, done sound switchable on its
-   own).
-4. Several Herdr windows: raise the first, all, or ask?
-5. Is the 1 s latency acceptable, or is the plugin wake-up (option C) wanted
-   from the start?
-6. Should the HUD hide the row for the pane that is already focused in the
-   active Herdr window (the user is looking at it)?
-7. Where should the click land if the agent has exited meanwhile: the tab, or
-   nothing plus a refresh?
+   own (section 5).
+4. **Several Herdr windows: raise the first match.**
+5. **Latency: 1 s polling is acceptable**; no plugin wake-up (option C).
+6. **Hide the row the user is looking at.** A row is hidden (and does not
+   beep) while its pane is `focused` in its session **and** the X11 active
+   window (`_NET_ACTIVE_WINDOW`, `xdotool getactivewindow`) is that session's
+   Herdr host window. When the user switches away it reappears without a
+   beep. `done` panes need no extra rule: viewing them marks them seen and
+   they leave `done`.
+7. **Click on a row whose agent is gone: do nothing, refresh.** When
+   `agent focus` fails, no tab focus and no window raise; the HUD re-polls
+   immediately.
