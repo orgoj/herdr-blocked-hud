@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@herdr_dev'
 created_date: '2026-10-30 12:40'
-updated_date: '2026-10-30 12:47'
+updated_date: '2026-10-30 12:49'
 labels: []
 dependencies: []
 type: docs
@@ -30,6 +30,8 @@ Prepare the repository for publication on GitHub under the MIT license. The user
 
 <!-- SECTION:NOTES:BEGIN -->
 User decision: README documents the normal GitHub install; the author's own installation from a local path is done by the bin agent and is not part of the README.
+
+Released as 0.1.1 so the README tag v0.1.1 carries the LICENSE and notice.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
