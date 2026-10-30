@@ -26,6 +26,23 @@ X11, Herdr client running in `wezterm-gui --class herdr`).
   `HERDR_SOCKET_PATH` overrides). Request `{"id":"x","method":"pane.list","params":{}}`
   returns the same payload as the CLI without spawning a process.
 
+### Done and seen
+
+- `done` = detector state `idle` and the pane not yet seen
+  (`src/app/api_helpers.rs::pane_agent_status`). It turns into `idle` when the
+  server marks the pane seen: `agent focus` / `pane focus`, or when the active
+  tab is shown in a Herdr window that has outer-terminal focus
+  (`mark_active_tab_seen`). Reads do not mark seen.
+- Caveat: each TUI client also tracks viewed completions itself; with several
+  attached clients the server's `done` can lag behind what one window shows.
+- There is no timestamp. `herdr agent list` (`agent.list`) carries
+  `state_change_seq` and `completion_seq` (set for `idle`/`done`, absent while
+  working); a new completion gets a new `completion_seq`. The HUD measures
+  "done for how long" itself from the first poll that saw that
+  `(terminal_id, completion_seq)` as `done`.
+- The agent's last reply is readable with `herdr agent read <pane> --source
+  recent --lines N` (socket `pane.read`, plain text, ANSI stripped).
+
 ### Events vs polling
 
 - `events.subscribe` with `pane.agent_status_changed` **requires a `pane_id`**
@@ -182,8 +199,49 @@ Limits:
 - Beep: when a `terminal_id` enters `blocked` that was not blocked in the
   previous poll; at most one beep per poll; no beep on HUD start for already
   blocked panes (configurable).
-- Hide when the blocked set is empty; show an error row (no beep) when Herdr is
-  unreachable for more than N polls.
+- Hide when the blocked and done sections are both empty; show an error row
+  (no beep) when Herdr is unreachable for more than N polls.
+
+### Long-done agents (user requirement)
+
+An agent that finished may still want something, so the HUD also lists agents
+that stay `done` (finished, not yet seen) longer than a threshold.
+
+- Second section below blocked: `workspace · tab · agent · 3m`, oldest first.
+- Threshold `done.after_seconds`, default `60`. The timer starts at the first
+  poll that sees the `(terminal_id, completion_seq)` as `done`; a new
+  completion restarts it. After a HUD restart, panes already `done` start
+  counting from the HUD start.
+- The row disappears when the pane leaves `done`: user views it (server marks
+  seen → `idle`), clicks it (`agent focus` marks seen), or the agent works
+  again.
+- Sound when a row enters the section: separate `done.sound`, default a
+  quieter sound than blocked; empty disables it.
+- Click: same as blocked (focus pane, raise window).
+
+Optional reply filter, **default off** (empty list = every long-done agent is
+reported):
+
+```toml
+[done]
+after_seconds = 60
+# Bottom-most line matching this regex is the agent's final status line.
+status_line_regex = '^\s*STATUS:'
+# Do not report the agent when its status line matches any of these.
+ignore_regexes = []            # e.g. ['^\s*STATUS:\s*DONE\s*$']
+read_lines = 80                # recent rows read once per completion
+```
+
+- Read once per `(terminal_id, completion_seq)` when the threshold passes,
+  never every poll; cache the decision.
+- Only the bottom-most line matching `status_line_regex` is tested. Matching
+  ignore regexes anywhere in the read window would be wrong: a short reply
+  without a status block, or one ending `STATUS: NEEDS_USER`, still has the
+  previous turn's `STATUS: DONE` higher up in the scrollback.
+- No status line found, or the read fails → report (fail open).
+- Agent TUIs draw their prompt box below the reply; the status line is above
+  it, inside the last 80 rows unless the reply's tail is very long.
+- A regex that does not compile is a startup config error, not a silent skip.
 - Single instance: lock file in `$XDG_RUNTIME_DIR`.
 - Config: small TOML/INI in `~/.config/herdr-blocked-hud/` — socket/session,
   window class, sound file, position, poll interval.
@@ -196,8 +254,9 @@ Limits:
 2. Sound: HUD-owned `paplay` sound, or rely on Herdr's own `[ui.sound]
    request_path`, which plays through the foreground client? Both would
    double-beep; Herdr's may be suppressed for the active tab.
-3. Should `done` (finished, not yet seen) also appear, e.g. as a second,
-   quieter section? The spec says blocked only.
+3. Long-done section (decided: yes, 60 s default, regex filter off by
+   default): should the done sound default to on or off, and should
+   `ignore_regexes` also hide agents with no status line at all?
 4. Several Herdr windows: raise the first, all, or ask?
 5. Is the 1 s latency acceptable, or is the plugin wake-up (option C) wanted
    from the start?
