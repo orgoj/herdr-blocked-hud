@@ -201,6 +201,19 @@ def read_session(session: Session) -> SessionState:
         return SessionState(session, error=f"session.snapshot: bad payload: {err}")
 
 
+def read_agent_tail(agent: Agent, lines: int) -> str | None:
+    """Last `lines` rendered rows of the agent's pane, or None on failure."""
+    command = [
+        "herdr", "--session", agent.session,
+        "agent", "read", agent.pane_id, "--source", "recent", "--lines", str(lines),
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=SESSION_LIST_TIMEOUT_S)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
 class Poller:
     """Polls Herdr on a daemon thread and hands each Model to `on_model`.
 
