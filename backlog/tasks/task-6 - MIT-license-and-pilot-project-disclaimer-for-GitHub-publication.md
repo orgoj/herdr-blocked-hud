@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@herdr_dev'
 created_date: '2026-10-30 12:40'
-updated_date: '2026-10-30 12:41'
+updated_date: '2026-10-30 12:47'
 labels: []
 dependencies: []
 type: docs
@@ -23,8 +23,14 @@ Prepare the repository for publication on GitHub under the MIT license. The user
 - [x] #1 LICENSE contains the MIT license text with copyright holder Michael Heca, 2026
 - [x] #2 pyproject.toml declares license MIT, the license file and the author
 - [x] #3 README states near the top that this is a personal pilot project for the author's machine and setup, unofficial and unaffiliated with Herdr, provided as is without warranty, and links the LICENSE
-- [x] #4 README install instructions no longer depend on a local file:// path
+- [x] #4 README installs a tagged release from the GitHub repository github.com/orgoj/herdr-blocked-hud
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+User decision: README documents the normal GitHub install; the author's own installation from a local path is done by the bin agent and is not part of the README.
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
