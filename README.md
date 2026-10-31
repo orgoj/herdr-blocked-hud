@@ -20,6 +20,8 @@ you:
   value set to `sticky` stays until the agent works again. A separate,
   switchable sound plays; a status value can play the blocked sound instead.
 
+![The HUD in demo mode: two blocked panes and a Done · NEEDS_USER row](docs/demo.png)
+
 Click a row to focus that pane in Herdr and raise its terminal window; `×`
 or a right click dismisses a done row. On the top line, the red `♪` mutes
 and unmutes the blocked sound and the orange `♪` the done sound (each struck
