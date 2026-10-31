@@ -94,6 +94,8 @@ class Hud:
         self.shown: View | None = None
         # "quit" or "restart" once a control button ended the main loop.
         self.exit_action: str | None = None
+        # The ♪ button silences every HUD sound until the process ends.
+        self.muted = False
 
         # Override-redirect: Openbox neither manages nor focuses the window,
         # it shows on every desktop, and `lift()` keeps it on top.
@@ -161,7 +163,7 @@ class Hud:
 
     def show(self, view: View) -> None:
         sound = sound_for(view, self.config)
-        if sound:
+        if sound and not self.muted:
             play(sound)
         if not view.visible:
             if self.shown is None or self.shown.visible:
@@ -178,7 +180,7 @@ class Hud:
     def render(self, view: View) -> None:
         for child in self.frame.winfo_children():
             child.destroy()
-        # The first header shares its line with the restart and quit buttons.
+        # The first header shares its line with the mute, restart and quit buttons.
         self.top = tk.Frame(self.frame, bg=BG)
         self.top.pack(fill=tk.X)
         self.top_free = True
@@ -189,6 +191,10 @@ class Hud:
             )
             button.pack(side=tk.RIGHT)
             self.on_release(button, 1, lambda action=action: self.exit(action))
+        self.mute_button = tk.Label(self.top, bg=BG, padx=4, cursor="hand2")
+        self.mute_button.pack(side=tk.RIGHT)
+        self.on_release(self.mute_button, 1, self.toggle_mute)
+        self.show_mute()
         if view.blocked:
             self.header("Blocked")
             for row in view.blocked:
@@ -223,6 +229,17 @@ class Hud:
             self.top_free = False
         else:
             label.pack(fill=tk.X, pady=(0, 2))
+
+    def toggle_mute(self) -> None:
+        self.muted = not self.muted
+        self.show_mute()
+
+    def show_mute(self) -> None:
+        """Struck-through grey note while muted, plain note while sound plays."""
+        if self.muted:
+            self.mute_button.configure(text="♪", fg=ERROR_FG, font=(*CONTROL_FONT, "overstrike"))
+        else:
+            self.mute_button.configure(text="♪", fg=HEADER_FG, font=CONTROL_FONT)
 
     def exit(self, action: str) -> None:
         """End the main loop; main() then quits or restarts."""

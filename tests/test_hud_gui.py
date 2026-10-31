@@ -69,17 +69,17 @@ class HudGuiTests(unittest.TestCase):
         # Top line: quit and restart packed from the right, then the first header.
         self.assertEqual(
             texts,
-            ["×", "↻", "Blocked", "▶ blocked row", "Done · NEEDS_USER", "▶ row a", "×",
+            ["×", "↻", "♪", "Blocked", "▶ blocked row", "Done · NEEDS_USER", "▶ row a", "×",
              "Done", "▶ row b", "×"],
         )
         widgets = [widget for _, widget in self.labels()]
         self.assertLess(widgets[1].winfo_x(), widgets[0].winfo_x())   # ↻ before ×
         self.before = ([], [])
-        self.press(widgets[5], 1, release_at=(-5, 2))     # released outside: nothing
-        self.press(widgets[6], 1)       # × of row a
-        self.press(widgets[8], 3)       # right click on row b
-        self.press(widgets[5], 1)       # left click on row a focuses it
-        self.press(widgets[3], 3)       # right click on a blocked row does nothing
+        self.press(widgets[6], 1, release_at=(-5, 2))     # released outside: nothing
+        self.press(widgets[7], 1)       # × of row a
+        self.press(widgets[9], 3)       # right click on row b
+        self.press(widgets[6], 1)       # left click on row a focuses it
+        self.press(widgets[4], 3)       # right click on a blocked row does nothing
         self.assertEqual(self.dismissed, [a, b])
         self.assertEqual(self.clicked, [a])
         self.assertIsNone(self.hud.exit_action)
@@ -96,6 +96,34 @@ class HudGuiTests(unittest.TestCase):
         self.assertEqual(self.hud.exit_action, "restart")
         self.press(quit_button, 1)
         self.assertEqual(self.hud.exit_action, "quit")
+
+    def test_mute_button_silences_sounds_but_keeps_the_hud(self):
+        from unittest import mock
+
+        beeping = View(blocked=(Row(agent("a"), "row a"),), beep_blocked=True)
+        played = []
+        with mock.patch("herdr_blocked_hud.app.play", played.append):
+            self.hud.show(beeping)
+            self.root.update()
+            self.assertEqual(len(played), 1)
+            mute = dict(self.labels())["♪"]
+            self.before = ([], [])
+            self.press(mute, 1)
+            self.assertTrue(self.hud.muted)
+            self.assertIn("overstrike", str(mute.cget("font")))
+            # A new beep while muted: the HUD shows, nothing plays.
+            self.hud.show(View(blocked=(Row(agent("b"), "row b"),), beep_blocked=True))
+            self.root.update()
+            self.assertEqual(len(played), 1)
+            self.assertEqual(self.root.state(), "normal")
+            # The state survives the re-render; unmuting plays again.
+            mute = dict(self.labels())["♪"]
+            self.assertIn("overstrike", str(mute.cget("font")))
+            self.press(mute, 1)
+            self.assertFalse(self.hud.muted)
+            self.assertNotIn("overstrike", str(mute.cget("font")))
+            self.hud.show(View(blocked=(Row(agent("c"), "row c"),), beep_blocked=True))
+            self.assertEqual(len(played), 2)
 
     def drag(self, widget, start, end):
         """Left-button drag from root coordinates `start` to `end` over `widget`."""

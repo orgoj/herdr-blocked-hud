@@ -19,7 +19,9 @@ you:
   switchable sound plays.
 
 Click a row to focus that pane in Herdr and raise its terminal window; `×`
-or a right click dismisses a done row. On the top line, `↻` restarts the
+or a right click dismisses a done row. On the top line, `♪` mutes and unmutes
+all HUD sounds until the HUD quits or restarts (struck through and grey while
+muted; the HUD still appears), `↻` restarts the
 HUD with the same command (so a newly installed version starts) and `×`
 quits it. Drag the HUD with the left mouse button to move it; it keeps that
 position until it quits or restarts. The
@@ -43,7 +45,7 @@ not affect the running HUD). The Python must include Tk; uv's managed
 CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.8
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.9
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
