@@ -150,7 +150,7 @@ class Hud:
         self.on_click = on_click
         self.on_dismiss = on_dismiss
         self.config = config
-        self.state = HudState()
+        self.state = HudState(section_order=tuple(config.done.modes))
         self.models: queue.Queue[tuple[Model, tuple[LongDone, ...]]] = queue.Queue()
         self.shown: View | None = None
         # "quit" or "restart" once a control button ended the main loop.

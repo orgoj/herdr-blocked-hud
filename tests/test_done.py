@@ -212,8 +212,8 @@ class DoneViewTests(unittest.TestCase):
         self.assertEqual(
             [(s.title, [r.text for r in s.rows]) for s in view.done],
             [("Done · NEEDS_USER", ["api · main · claude · 1h01m"]),
-             ("Done", ["api · main · claude · 1m"]),
-             ("Done · DONE", ["api · main · claude · 1m"])],
+             ("Done · DONE", ["api · main · claude · 1m"]),
+             ("Done", ["api · main · claude · 1m"])],
         )
         self.assertTrue(view.visible)
         again = hud.update(m, (LongDone(a, 66, "DONE"),))
@@ -256,6 +256,21 @@ class DoneViewTests(unittest.TestCase):
         view = hud.update(m, (LongDone(m.sessions[0].agents[0], 1, "NEEDS_USER"),))
         self.assertTrue(view.visible)
         self.assertFalse(view.beep_done)
+
+    def test_sections_follow_modes_order_then_oldest_row_plain_done_last(self):
+        hud = HudState(section_order=("NEEDS_USER", "WAITING", "DONE"))
+        m = model(*(agent(t) for t in "abcdefg"))
+        a, b, c, d, e, f, g = m.sessions[0].agents
+        view = hud.update(m, (
+            LongDone(a, 900), LongDone(b, 800, "DONE"), LongDone(c, 700, "OTHER"),
+            LongDone(d, 600, "LATER"), LongDone(e, 100, "NEEDS_USER"),
+            LongDone(f, 300, "NEEDS_USER"), LongDone(g, 200, "DONE"),
+        ))
+        self.assertEqual(
+            [(s.title, [r.agent.terminal_id for r in s.rows]) for s in view.done],
+            [("Done · NEEDS_USER", ["f", "e"]), ("Done · DONE", ["b", "g"]),
+             ("Done · OTHER", ["c"]), ("Done · LATER", ["d"]), ("Done", ["a"])],
+        )
 
     def test_rows_listed_at_start_play_no_sound(self):
         config = DoneConfig(modes={"NEEDS_USER": {"mode": "sticky", "sound": "blocked"}},

@@ -79,6 +79,9 @@ class HudState:
     Herdr window does not mean the user sees its prompt.
     """
 
+    # Status values whose Done sections come first, in this order (the keys of
+    # [done.modes] as written); other values follow, plain Done last.
+    section_order: tuple[str, ...] = ()
     _known_blocked: set[tuple[str, str]] | None = None
     _known_done: set[tuple[str, str, int | None]] = field(default_factory=set)
     _error_polls: int = 0
@@ -126,14 +129,21 @@ class HudState:
 
         show_session = len({s.session.name for s in model.sessions}) > 1
         rows = tuple(Row(a, row_text(a, show_session)) for a in blocked)
-        # One section per status value, oldest row first, sections in that order.
+        # One section per status value, oldest row first. Sections: the
+        # section_order ones in that order, then the others in oldest-row
+        # order, plain Done last.
         grouped: dict[str | None, list[Row]] = {}
         for d in sorted(long_done, key=lambda d: -d.seconds):
             text = f"{row_text(d.agent, show_session)} · {elapsed_text(d.seconds)}"
             grouped.setdefault(d.status, []).append(Row(d.agent, text))
+        rank = {status: i for i, status in enumerate(self.section_order)}
+        first_seen = list(grouped)
+        ordered = sorted(grouped, key=lambda status: (
+            status is None, rank.get(status, len(rank)), first_seen.index(status),
+        ))
         sections = tuple(
-            Section("Done" if status is None else f"Done · {status}", tuple(group))
-            for status, group in grouped.items()
+            Section("Done" if status is None else f"Done · {status}", tuple(grouped[status]))
+            for status in ordered
         )
         return View(
             blocked=rows,

@@ -42,6 +42,8 @@ no_status_mode = "transient"
 read_lines = 80
 
 [done.modes]
+# Done sections follow the order of the values written here; values not
+# listed follow in the order of their oldest row, plain Done last.
 # Example: DONE = "transient" with default_mode = "sticky" keeps every
 # other status value listed until the agent works again.
 # A table also picks the sound a new row plays, "done" (default) or

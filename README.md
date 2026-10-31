@@ -67,7 +67,7 @@ checkout does not affect the running HUD). The Python must include Tk; uv's
 managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.16
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.17
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -144,6 +144,11 @@ silences it:
 [done.modes]
 NEEDS_USER = { mode = "sticky", sound = "blocked" }
 ```
+
+Sections appear in the order their status values are written in
+`[done.modes]`; values not listed there follow in the order of their oldest
+row, and the plain `Done` section comes last. Rows within a section are
+oldest first.
 
 The `×` button or a right click dismisses a done row for that completion.
 

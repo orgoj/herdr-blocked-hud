@@ -47,6 +47,12 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(loaded.done.default_mode, "sticky")
         self.assertEqual(loaded.done.modes, {"DONE": "hide"})
 
+    def test_modes_keep_the_file_order(self):
+        loaded = config.load(self.write(
+            '[done.modes]\nNEEDS_USER = "sticky"\nWAITING = "sticky"\nDONE = "transient"\n'
+        ))
+        self.assertEqual(list(loaded.done.modes), ["NEEDS_USER", "WAITING", "DONE"])
+
     def test_mode_table_sets_the_sound(self):
         loaded = config.load(self.write(
             '[done.modes]\nDONE = "transient"\n'

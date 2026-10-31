@@ -250,6 +250,9 @@ that stay `done` (finished, not yet seen) longer than a threshold.
 
 - Sections below blocked, one per status value (`Done · NEEDS_USER`, plain
   `Done` without a status line): `workspace · tab · agent · 3m`, oldest first.
+  Section order: the status values in the order of their keys in
+  `[done.modes]` (tomllib keeps the file order), then unlisted values in
+  oldest-row order, plain `Done` last (user decision, no extra key).
 - Threshold `done.after_seconds`, default `5`. The timer starts at the first
   poll that sees the `(terminal_id, completion_seq)` as `done`; a new
   completion restarts it. After a HUD restart, panes already `done` start

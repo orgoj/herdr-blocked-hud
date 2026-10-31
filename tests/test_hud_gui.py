@@ -55,6 +55,14 @@ class HudGuiTests(unittest.TestCase):
         self.root.update()
         self.before = (list(self.clicked), list(self.dismissed))
 
+    def test_sections_follow_the_config_modes_order(self):
+        from herdr_blocked_hud.app import Hud
+        from herdr_blocked_hud.logic import DoneConfig
+
+        done = DoneConfig(modes={"NEEDS_USER": "sticky", "DONE": "transient"})
+        hud = Hud(self.root, on_click=lambda a: None, config=Config(done=done))
+        self.assertEqual(hud.state.section_order, ("NEEDS_USER", "DONE"))
+
     def test_done_rows_dismiss_by_close_button_and_right_click(self):
         a, b, c = agent("a"), agent("b"), agent("c")
         self.hud.render(View(
