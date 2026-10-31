@@ -132,6 +132,18 @@ class MonitorTests(unittest.TestCase):
         )
         self.assertEqual(x11.parse_monitors(""), [])
 
+    def test_negative_origins(self):
+        listing = (
+            "Monitors: 3\n"
+            " 0: +*DP-0 2560/698x1440/393+0+0  DP-0\n"
+            " 1: +HDMI-0 1920/477x1080/268-1920+0  HDMI-0\n"
+            " 2: +DP-1 1920/527x1080/296+0-1080  DP-1\n"
+        )
+        self.assertEqual(
+            x11.parse_monitors(listing),
+            [(0, 0, 2560, 1440), (-1920, 0, 1920, 1080), (0, -1080, 1920, 1080)],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -387,32 +387,41 @@ class HudGuiTests(unittest.TestCase):
             root.update_idletasks()
             return root.winfo_x(), root.winfo_y()
 
-        root, hud = run([primary, second])
-        self.assertEqual(position(root), (1000 - 320 - 24, 36))
-        header = hud.top.winfo_children()[-1]          # "Blocked", packed last
-        header.event_generate("<ButtonPress-1>", x=2, y=2, rootx=700, rooty=40)
-        header.event_generate("<B1-Motion>", x=2, y=2, rootx=1300, rooty=40)
-        header.event_generate("<ButtonRelease-1>", x=2, y=2, rootx=1300, rooty=40)
-        root.update()
-        self.assertEqual(position(root), (1256, 36))
-        # Refreshes, also with another height, keep it on the second monitor.
-        hud.render(two)
-        root.update()
-        self.assertEqual(position(root), (1256, 36))
-        hud.render(one)
-        root.update()
-        self.assertEqual(position(root), (1256, 36))
-        root.destroy()
+        # (second monitor, drag target x, dragged left, left after removal):
+        # right of the primary, and left of it with a negative origin.
+        layouts = (
+            ((1000, 0, 1000, 800), 1300, 1256, 1000 - 320),
+            ((-1000, 0, 1000, 800), -300, -344, 0),
+        )
+        for second, target, dragged, fallback in layouts:
+            with self.subTest(second=second):
+                state_file.unlink(missing_ok=True)
+                root, hud = run([primary, second])
+                self.assertEqual(position(root), (1000 - 320 - 24, 36))
+                header = hud.top.winfo_children()[-1]          # "Blocked", packed last
+                header.event_generate("<ButtonPress-1>", x=2, y=2, rootx=700, rooty=40)
+                header.event_generate("<B1-Motion>", x=2, y=2, rootx=target, rooty=40)
+                header.event_generate("<ButtonRelease-1>", x=2, y=2, rootx=target, rooty=40)
+                root.update()
+                self.assertEqual(position(root), (dragged, 36))
+                # Refreshes, also with another height, keep it on that monitor.
+                hud.render(two)
+                root.update()
+                self.assertEqual(position(root), (dragged, 36))
+                hud.render(one)
+                root.update()
+                self.assertEqual(position(root), (dragged, 36))
+                root.destroy()
 
-        # A restart restores it there.
-        root, hud = run([primary, second])
-        self.assertEqual(position(root), (1256, 36))
-        root.destroy()
+                # A restart restores it there.
+                root, hud = run([primary, second])
+                self.assertEqual(position(root), (dragged, 36))
+                root.destroy()
 
-        # With the second monitor gone, it lands on the remaining one.
-        root, hud = run([primary])
-        self.assertEqual(position(root), (1000 - 320, 36))
-        root.destroy()
+                # With the second monitor gone, it lands on the remaining one.
+                root, hud = run([primary])
+                self.assertEqual(position(root), (fallback, 36))
+                root.destroy()
 
 
 if __name__ == "__main__":

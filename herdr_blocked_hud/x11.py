@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import Callable, Iterable
@@ -224,6 +225,8 @@ def activate(window: Window) -> bool:
 
 
 Monitor = tuple[int, int, int, int]
+# `2560/698x1440/393+0+0`; the origin is signed (`-1920+0`) to be safe.
+MONITOR_GEOMETRY = re.compile(r"(\d+)(?:/\d+)?x(\d+)(?:/\d+)?([+-]\d+)([+-]\d+)")
 
 
 def monitors() -> list[Monitor]:
@@ -249,12 +252,11 @@ def parse_monitors(listing: str) -> list[Monitor]:
         fields = line.split()
         if len(fields) < 3:
             continue
-        try:
-            size, x, y = fields[2].split("+")
-            width, height = (int(part.split("/")[0]) for part in size.split("x"))
-            geometry = (int(x), int(y), width, height)
-        except ValueError:
+        match = MONITOR_GEOMETRY.fullmatch(fields[2])
+        if match is None:
             continue
+        width, height, x, y = (int(group) for group in match.groups())
+        geometry = (x, y, width, height)
         if fields[1].startswith("+*") or fields[1].startswith("*"):
             found.insert(0, geometry)
         else:
