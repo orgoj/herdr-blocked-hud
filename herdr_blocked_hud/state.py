@@ -34,18 +34,22 @@ def load(path: pathlib.Path, corner: str) -> HudSettings:
     except (OSError, ValueError) as err:
         print(f"herdr-blocked-hud: ignoring state file {path}: {err}", file=sys.stderr)
         return HudSettings(corner=corner)
+    # Any malformed field voids the whole file; a valid offset saved for
+    # another corner is only not applied.
     if not isinstance(data, dict):
         return HudSettings(corner=corner)
-    muted = data.get("muted") is True
     offset = data.get("offset")
-    if (
-        data.get("corner") == corner
+    if not (
+        isinstance(data.get("muted"), bool)
+        and isinstance(data.get("corner"), str)
         and isinstance(offset, list)
         and len(offset) == 2
         and all(type(value) is int for value in offset)
     ):
-        return HudSettings(corner, (offset[0], offset[1]), muted)
-    return HudSettings(corner=corner, muted=muted)
+        return HudSettings(corner=corner)
+    if data["corner"] != corner:
+        return HudSettings(corner=corner, muted=data["muted"])
+    return HudSettings(corner, (offset[0], offset[1]), data["muted"])
 
 
 def save(path: pathlib.Path, settings: HudSettings) -> None:

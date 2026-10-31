@@ -33,7 +33,9 @@ class StateFileTests(unittest.TestCase):
         self.assertEqual(self.load_quietly(), HudSettings("top-right"))
         self.path.parent.mkdir()
         for text in ("{not json", "[1, 2]", '{"offset": "x", "muted": 1, "corner": "top-right"}',
-                     '{"offset": [1.5, 2], "corner": "top-right"}'):
+                     '{"offset": [1.5, 2], "corner": "top-right", "muted": true}',
+                     '{"offset": [20, 30], "corner": "top-right", "muted": "yes"}',
+                     '{"offset": [20, 30], "corner": "top-right"}'):
             self.path.write_text(text)
             self.assertEqual(self.load_quietly(), HudSettings("top-right"), text)
 
