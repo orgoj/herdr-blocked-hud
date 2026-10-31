@@ -204,6 +204,25 @@ Limits:
 - Clicks reach the rows without focusing the HUD (rows are labels with
   button bindings).
 
+## 4a. Status-bar icon (TASK-20)
+
+- Tk 9 `tk systray` (XEmbed) shows in the LXQt 1.4 panel but never gets
+  clicks: the panel's `plugin-tray` proxies XEmbed icons to
+  StatusNotifierItems and, because Tk docks a wrapper window without
+  `ButtonPressMask`, replays clicks with XTest at the pointer, which hits the
+  panel itself. Verified on this setup (Enter events arrive, no button events).
+- So the HUD exports its own `org.kde.StatusNotifierItem`: `dbus.py` is a
+  minimal stdlib D-Bus client (SASL EXTERNAL, marshalling, calls, replies,
+  signals), `tray.py` the item (properties, Activate/ContextMenu, generated
+  ARGB32 circle icons, re-registration on the watcher's `NameOwnerChanged`).
+- No `Menu` property and no dbusmenu: the LXQt panel then calls
+  `ContextMenu(x, y)` and the HUD pops up its own Tk menu there.
+- A daemon thread owns the connection (connect, register, answer); clicks
+  reach the Tk thread through a queue drained with the model queue. The Tk
+  thread only sends the small `NewIcon`/`NewToolTip` signals on state change.
+- Tests: codec round trips and byte layout; the item against a private
+  `dbus-daemon` with `gdbus` as an independent decoder.
+
 ## 5. Proposed behavior details
 
 - Rows: `workspace label · tab label · agent` (`display_agent` or `agent`),

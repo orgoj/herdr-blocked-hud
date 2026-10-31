@@ -18,6 +18,7 @@ from typing import Callable
 from . import config as config_module
 from . import sounds, x11
 from . import state as state_module
+from . import tray as tray_module
 from .config import Config, ConfigError
 from .focus import focus_agent
 from .logic import DoneTracker, HudState, LongDone, Row, View
@@ -97,9 +98,21 @@ class Hud:
         config: Config,
         on_dismiss: Callable[[Agent], None] = lambda agent: None,
         state_file: pathlib.Path | None = None,
+        tray: tray_module.TrayItem | None = None,
     ):
-        """`state_file` remembers position and mute across runs; None: no file."""
+        """`state_file` remembers position and mute across runs; None: no file.
+
+        `tray` is the status-bar icon; its clicks arrive in `tray_events`.
+        """
         self.root = root
+        self.tray = tray
+        self.tray_events: queue.Queue[tuple] = tray.events if tray else queue.Queue()
+        # The window is mapped; `forced` overrides "shown when something is
+        # listed" after a tray click, until the next sound event.
+        self.mapped = False
+        self.forced: bool | None = None
+        self.rendered: View | None = None
+        self.mute_button: tk.Label | None = None
         self.on_click = on_click
         self.on_dismiss = on_dismiss
         self.config = config
@@ -139,6 +152,13 @@ class Hud:
         root.bind("<ButtonPress-1>", self.drag_start)
         root.bind("<B1-Motion>", self.drag_move)
         root.bind("<ButtonRelease-1>", self.drag_end)
+        # Tray right-click menu: the same actions as the top-line buttons.
+        self.menu = tk.Menu(root, tearoff=False)
+        self.menu_mute = tk.BooleanVar(root, value=self.muted)
+        self.menu.add_checkbutton(label="Mute", variable=self.menu_mute,
+                                  command=self.toggle_mute)
+        self.menu.add_command(label="Restart", command=lambda: self.exit("restart"))
+        self.menu.add_command(label="Quit", command=lambda: self.exit("quit"))
 
     def drag_start(self, event: tk.Event) -> None:
         self.drag = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
@@ -188,23 +208,57 @@ class Hud:
                 break
         if latest is not None:
             self.show(self.state.update(*latest))
+        while True:
+            try:
+                event = self.tray_events.get_nowait()
+            except queue.Empty:
+                break
+            self.tray_event(event)
         self.root.after(DRAIN_MS, self.start_draining)
 
     def show(self, view: View) -> None:
         sound = sound_for(view, self.config)
         if sound:
             self.play(sound)
-        if not view.visible:
-            if self.shown is None or self.shown.visible:
-                self.root.withdraw()
-            self.shown = view
-            return
-        if view != self.shown:
-            self.render(view)
-        if self.shown is None or not self.shown.visible:
-            self.root.deiconify()
-        self.root.lift()
+        if view.beep_blocked or view.beep_done:
+            self.forced = None
+        self.apply(view)
+
+    def apply(self, view: View) -> None:
+        """Map, render or hide for `view`; plays nothing."""
         self.shown = view
+        self.update_tray()
+        visible = view.visible if self.forced is None else self.forced
+        if not visible:
+            if self.mapped:
+                self.root.withdraw()
+                self.mapped = False
+            return
+        if view != self.rendered:
+            self.render(view)
+        if not self.mapped:
+            self.root.deiconify()
+            self.mapped = True
+        self.root.lift()
+
+    def tray_event(self, event: tuple) -> None:
+        if event[0] == "activate":
+            # Hide a shown HUD, show a hidden one (also with nothing listed).
+            self.forced = not self.mapped
+            self.apply(self.shown or View())
+        elif event[0] == "menu":
+            self.menu_mute.set(self.muted)
+            self.menu.tk_popup(event[1], event[2])
+
+    def update_tray(self) -> None:
+        if self.tray is None:
+            return
+        view = self.shown or View()
+        self.tray.set_state(tray_module.TrayState(
+            blocked=len(view.blocked),
+            done=sum(len(section.rows) for section in view.done),
+            muted=self.muted,
+        ))
 
     def render(self, view: View) -> None:
         for child in self.frame.winfo_children():
@@ -224,6 +278,9 @@ class Hud:
         self.mute_button.pack(side=tk.RIGHT)
         self.on_release(self.mute_button, 1, self.toggle_mute)
         self.show_mute()
+        self.rendered = view
+        if not view.visible:
+            self.header("Nothing waiting")
         if view.blocked:
             self.header("Blocked")
             for row in view.blocked:
@@ -270,9 +327,12 @@ class Hud:
         self.muted = not self.muted
         self.show_mute()
         self.save_state()
+        self.update_tray()
 
     def show_mute(self) -> None:
         """Struck-through grey note while muted, plain note while sound plays."""
+        if self.mute_button is None:
+            return
         if self.muted:
             self.mute_button.configure(text="♪", fg=ERROR_FG, font=(*CONTROL_FONT, "overstrike"))
         else:
@@ -442,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
 
         hud = Hud(
             root, on_click=on_click, config=config, on_dismiss=on_dismiss,
-            state_file=state_module.state_path(),
+            state_file=state_module.state_path(), tray=tray_module.start(queue.Queue()),
         )
         poller.start()
         hud.start_draining()

@@ -36,7 +36,19 @@ the session name is shown only when more than one session runs.
 
 - Python 3.11+ with Tk (`python3-tk`), no other Python packages
 - `herdr` on `PATH`, X11 with `wmctrl`, `xrandr`, and `paplay`
+- Optional status-bar icon: a D-Bus session bus and a panel that shows
+  StatusNotifierItems (LXQt, KDE Plasma, ...)
 - Tested only on Lubuntu (LXQt + Openbox) with Herdr 0.9.5
+
+## Status-bar icon
+
+The HUD puts a dot in the panel: grey when nothing is listed, orange when
+only done rows are listed, red when a pane is blocked; the tooltip gives the
+counts and says when sound is muted. A left click hides a shown HUD or shows
+a hidden one (also with nothing listed, e.g. to move it); the next new
+blocked or done event shows it again. A right click opens a menu with Mute,
+Restart and Quit. Without a session bus or a StatusNotifier panel the HUD
+runs without the icon; it registers when the panel starts later or restarts.
 
 ## Install and run
 
@@ -55,7 +67,7 @@ checkout does not affect the running HUD). The Python must include Tk; uv's
 managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.11
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.12
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit

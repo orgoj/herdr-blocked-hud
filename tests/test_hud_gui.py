@@ -145,6 +145,72 @@ class HudGuiTests(unittest.TestCase):
             sounds[0][0](*sounds[0][1])
             self.assertEqual(len(played), 1)
 
+    def test_tray_click_toggles_the_hud_until_the_next_sound_event(self):
+        a = agent("a")
+        self.hud.show(View())
+        self.root.update()
+        self.assertFalse(self.hud.mapped)
+        # Shown on a click even with nothing listed.
+        self.hud.tray_event(("activate",))
+        self.root.update()
+        self.assertEqual(self.root.state(), "normal")
+        self.assertIn("Nothing waiting", [text for text, _ in self.labels()])
+        self.hud.tray_event(("activate",))
+        self.root.update()
+        self.assertEqual(self.root.state(), "withdrawn")
+        # Hidden by a click: a refresh with rows but no sound keeps it hidden...
+        self.hud.show(View(blocked=(Row(a, "row a"),)))
+        self.root.update()
+        self.assertEqual(self.root.state(), "withdrawn")
+        # ...a new sound event shows it again.
+        self.hud.show(View(blocked=(Row(a, "row a"), Row(agent("b"), "row b")),
+                           beep_blocked=True))
+        self.root.update()
+        self.assertEqual(self.root.state(), "normal")
+        self.assertIsNone(self.hud.forced)
+
+    def test_tray_events_drain_and_menu_acts_like_the_buttons(self):
+        self.hud.tray_events.put(("activate",))
+        self.hud.start_draining()
+        self.root.update()
+        self.assertEqual(self.root.state(), "normal")
+        menu = self.hud.menu
+        labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1)]
+        self.assertEqual(labels, ["Mute", "Restart", "Quit"])
+        menu.invoke(0)
+        self.assertTrue(self.hud.muted)
+        self.assertTrue(self.hud.menu_mute.get())
+        self.assertIn("overstrike", str(self.hud.mute_button.cget("font")))
+        menu.invoke(0)
+        self.assertFalse(self.hud.muted)
+        menu.invoke(1)
+        self.assertEqual(self.hud.exit_action, "restart")
+        menu.invoke(2)
+        self.assertEqual(self.hud.exit_action, "quit")
+
+    def test_hud_reports_its_state_to_the_tray(self):
+        import queue
+        import tkinter as tk
+
+        from herdr_blocked_hud.app import Hud
+        from herdr_blocked_hud.tray import TrayState
+
+        class FakeTray:
+            events = queue.Queue()
+            states = []
+
+            def set_state(self, state):
+                self.states.append(state)
+
+        root = tk.Tk()
+        self.addCleanup(root.destroy)
+        fake = FakeTray()
+        hud = Hud(root, on_click=lambda a: None, config=Config(), tray=fake)
+        hud.show(View(blocked=(Row(agent("a"), "a"),),
+                      done=(Section("Done", (Row(agent("b"), "b"), Row(agent("c"), "c"))),)))
+        hud.toggle_mute()
+        self.assertEqual(fake.states[-2:], [TrayState(1, 2, False), TrayState(1, 2, True)])
+
     def test_position_and_mute_survive_a_restart(self):
         import pathlib
         import shutil
