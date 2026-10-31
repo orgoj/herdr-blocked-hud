@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@hud_dev'
 created_date: '2026-10-31 07:27'
-updated_date: '2026-10-31 07:29'
+updated_date: '2026-10-31 07:30'
 labels: []
 dependencies: []
 type: feature
@@ -25,6 +25,12 @@ Sometimes the user only wants the HUD to pop up, without sound. A button on the 
 - [x] #3 The button shows whether sound is on or off
 - [x] #4 Mute state lasts for the life of the process
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Review fix: demo sounds also go through Hud.play (start_demo), covered by test_mute_covers_the_demo_sounds; suite 88 OK.
+<!-- SECTION:NOTES:END -->
 
 ## Final Summary
 

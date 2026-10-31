@@ -163,8 +163,8 @@ class Hud:
 
     def show(self, view: View) -> None:
         sound = sound_for(view, self.config)
-        if sound and not self.muted:
-            play(sound)
+        if sound:
+            self.play(sound)
         if not view.visible:
             if self.shown is None or self.shown.visible:
                 self.root.withdraw()
@@ -230,6 +230,11 @@ class Hud:
         else:
             label.pack(fill=tk.X, pady=(0, 2))
 
+    def play(self, sound: str) -> None:
+        """Every HUD sound goes through here, so the mute button covers it."""
+        if not self.muted:
+            play(sound)
+
     def toggle_mute(self) -> None:
         self.muted = not self.muted
         self.show_mute()
@@ -286,6 +291,21 @@ def on_release(widget: tk.Widget, button: int, action: Callable[[], None]) -> No
             action()
 
     widget.bind(f"<ButtonRelease-{button}>", released)
+
+
+def start_demo(root: tk.Tk, config: Config) -> Hud:
+    """Show the demo rows, play both sounds, end after 8 s."""
+    hud = Hud(root, on_click=lambda agent: None, config=config)
+    model, long_done = demo_model()
+    hud.submit(model, long_done)
+    hud.start_draining()
+    # The first reading never beeps, so let the user hear both sounds here.
+    for delay, view in ((300, View(beep_blocked=True)), (2500, View(beep_done=True))):
+        sound = sound_for(view, config)
+        if sound:
+            root.after(delay, hud.play, sound)
+    root.after(8000, root.destroy)
+    return hud
 
 
 def acquire_single_instance() -> object | None:
@@ -358,16 +378,7 @@ def main(argv: list[str] | None = None) -> int:
     root = tk.Tk(className="herdr-blocked-hud")
     interrupted = quit_on_sigint(root)
     if "--demo" in argv:
-        hud = Hud(root, on_click=lambda agent: None, config=config)
-        model, long_done = demo_model()
-        hud.submit(model, long_done)
-        hud.start_draining()
-        # The first reading never beeps, so let the user hear both sounds here.
-        for delay, view in ((300, View(beep_blocked=True)), (2500, View(beep_done=True))):
-            sound = sound_for(view, config)
-            if sound:
-                root.after(delay, play, sound)
-        root.after(8000, root.destroy)
+        hud = start_demo(root, config)
     else:
         sessions: list[Session] = []
         tracker = DoneTracker(config.done, read_agent_tail, time.monotonic)

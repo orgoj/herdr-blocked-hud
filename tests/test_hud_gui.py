@@ -125,6 +125,26 @@ class HudGuiTests(unittest.TestCase):
             self.hud.show(View(blocked=(Row(agent("c"), "row c"),), beep_blocked=True))
             self.assertEqual(len(played), 2)
 
+    def test_mute_covers_the_demo_sounds(self):
+        from unittest import mock
+
+        from herdr_blocked_hud.app import start_demo
+
+        scheduled = []
+        with mock.patch.object(self.root, "after", lambda ms, f, *a: scheduled.append((f, a))):
+            hud = start_demo(self.root, Config())
+        sounds = [(f, a) for f, a in scheduled if f == hud.play]
+        self.assertEqual(len(sounds), 2)
+        played = []
+        hud.muted = True
+        with mock.patch("herdr_blocked_hud.app.play", played.append):
+            for f, a in sounds:
+                f(*a)
+            self.assertEqual(played, [])
+            hud.muted = False
+            sounds[0][0](*sounds[0][1])
+            self.assertEqual(len(played), 1)
+
     def drag(self, widget, start, end):
         """Left-button drag from root coordinates `start` to `end` over `widget`."""
         widget.event_generate("<ButtonPress-1>", x=2, y=2, rootx=start[0], rooty=start[1])
