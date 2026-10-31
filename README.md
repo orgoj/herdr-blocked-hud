@@ -40,12 +40,22 @@ the session name is shown only when more than one session runs.
 
 ## Install and run
 
-Install a tagged release as a uv tool (a copy, so work in the checkout does
-not affect the running HUD). The Python must include Tk; uv's managed
-CPython does.
+Recommended: let your own coding agent do it. This project fits one setup,
+so the agent can check and adapt it to yours. For example:
+
+> Install https://github.com/orgoj/herdr-blocked-hud for me. First review the
+> code for safety (what it runs, reads and sends), then install the latest
+> tagged release in the way that fits this machine, set up autostart for my
+> desktop, and adapt `~/.config/herdr-blocked-hud/config.toml` to my setup.
+> Also add the STATUS-line instruction from its README to my agent
+> instructions if I do not have one yet.
+
+Manual install: a tagged release as a uv tool (a copy, so work in the
+checkout does not affect the running HUD). The Python must include Tk; uv's
+managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.9
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.10
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -105,7 +115,26 @@ value's mode decides how long the row stays:
 - `hide`: never listed.
 
 The `×` button or a right click dismisses a done row for that completion.
-Example: forget `DONE` replies once seen, keep every other one listed:
+
+### Making agents write a status line
+
+Agents write no status line by themselves. Put an instruction like this in
+your agents' instruction file (`AGENTS.md`, `CLAUDE.md`, ...):
+
+```markdown
+Turn end: end every turn's final message with this block:
+`STATUS: DONE | DONE_FOLLOWUP | NEEDS_USER | WAITING`, then `Done:` (one
+line, what is finished), `Issues:` (problems found, or `none`), `Next:`
+(DONE_FOLLOWUP: proposed follow-up tasks; NEEDS_USER: exactly what you need;
+WAITING: whom or what you wait for; DONE: `none`).
+DONE = everything finished; DONE_FOLLOWUP = finished, but found work worth
+recording as tasks; NEEDS_USER = unfinished, needs a decision, approval or
+access; WAITING = still waits for delegated work or a running job.
+```
+
+A matching config: a plain `DONE` needs nothing more from you, so it leaves
+once you have seen it; `NEEDS_USER` (and the others) stay listed until the
+agent works again, so a question you glanced at is not lost:
 
 ```toml
 [done]
@@ -114,6 +143,9 @@ default_mode = "sticky"
 [done.modes]
 DONE = "transient"
 ```
+
+Use `WAITING = "hide"` instead if an agent waiting for another agent should
+not be listed at all.
 
 ## How it works
 
