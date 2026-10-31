@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Set the release version: bin/bump-version X.Y.Z
 
-Updates the version in pyproject.toml and the install tag in README.md.
+Updates the version in pyproject.toml and herdr-plugin.toml and the install
+tag in README.md.
 Rejects a malformed version or one not newer than the current one, and then
 changes no file.
 """
@@ -36,8 +37,10 @@ def main(argv):
         raise SystemExit(f"bump-version: malformed version {new!r}, expected X.Y.Z")
     pyproject_path = ROOT / "pyproject.toml"
     readme_path = ROOT / "README.md"
+    manifest_path = ROOT / "herdr-plugin.toml"
     pyproject = pyproject_path.read_text()
     readme = readme_path.read_text()
+    manifest = manifest_path.read_text()
     current = PYPROJECT.findall(pyproject)
     if len(current) != 1 or parse(current[0]) is None:
         raise SystemExit(f"bump-version: cannot read the current version in {pyproject_path}")
@@ -45,8 +48,10 @@ def main(argv):
         raise SystemExit(f"bump-version: {new} is not newer than {current[0]}")
     pyproject = replace_once(PYPROJECT, pyproject, f'version = "{new}"', pyproject_path)
     readme = replace_once(README_TAG, readme, rf"\g<1>{new}", readme_path)
+    manifest = replace_once(PYPROJECT, manifest, f'version = "{new}"', manifest_path)
     pyproject_path.write_text(pyproject)
     readme_path.write_text(readme)
+    manifest_path.write_text(manifest)
     print(f"{current[0]} -> {new}")
     return 0
 

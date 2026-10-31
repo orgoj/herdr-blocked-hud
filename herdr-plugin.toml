@@ -1,0 +1,17 @@
+id = "orgoj.blocked-hud"
+name = "Blocked HUD"
+version = "0.1.19"
+min_herdr_version = "0.7.5"
+description = "Always-on-top X11 window listing blocked and done agent panes, with sounds and click-to-focus"
+platforms = ["linux"]
+
+# Start the HUD when a Herdr server starts; the launcher detaches it and
+# exits at once, and a second HUD exits because one is already running.
+[[startup]]
+command = ["sh", "bin/herdr-plugin-start"]
+
+[[actions]]
+id = "start"
+title = "Start Blocked HUD"
+contexts = ["workspace"]
+command = ["sh", "bin/herdr-plugin-start"]

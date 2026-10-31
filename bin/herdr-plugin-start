@@ -1,0 +1,17 @@
+#!/bin/sh
+# Herdr plugin entry (startup hook and action, see herdr-plugin.toml): start
+# the HUD detached from Herdr and exit at once. A HUD that is already running
+# keeps running; the new one exits ("already running" in the log).
+set -eu
+cd "$(dirname "$0")/.."
+log="${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}}/hud.log"
+# The HUD calls `herdr`; make the binary that runs this plugin reachable.
+if [ -n "${HERDR_BIN_PATH:-}" ]; then
+    PATH="$(dirname "$HERDR_BIN_PATH"):$PATH"
+    export PATH
+fi
+# The HUD watches every Herdr session: drop this plugin's session context.
+for name in $(env | sed -n 's/^\(HERDR_[A-Za-z0-9_]*\)=.*/\1/p'); do
+    unset "$name"
+done
+setsid -f python3 -m herdr_blocked_hud >>"$log" 2>&1 </dev/null

@@ -73,7 +73,7 @@ checkout does not affect the running HUD). The Python must include Tk; uv's
 managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.18
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.19
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -89,11 +89,31 @@ The autostart entry runs `herdr-blocked-hud` from `PATH`; `~/.local/bin` (where
 uv puts tool commands) must be on the session `PATH` (Ubuntu's `~/.profile`
 adds it when it exists), as must `herdr`.
 
+### As a Herdr plugin
+
+The repository is also a Herdr plugin (`herdr-plugin.toml`, Herdr 0.7.5+,
+Linux), listed on the [Herdr marketplace](https://herdr.dev/plugins/):
+
+```bash
+herdr plugin install orgoj/herdr-blocked-hud
+```
+
+There is no build step; the HUD runs from the plugin checkout with
+`python3 -m herdr_blocked_hud`. A startup hook starts it, detached, whenever a
+Herdr server starts, and the action `Start Blocked HUD`
+(`herdr plugin action invoke orgoj.blocked-hud.start`) starts it by hand; a
+HUD that already runs keeps running. Its output goes to `hud.log` in the
+plugin state directory. The Herdr server's environment must provide
+`python3` with Tk, `setsid` (util-linux) and the X11 `DISPLAY`, plus the tools
+listed under Requirements. After `herdr plugin update`, quit the HUD (`×`)
+and start it with the action, so the new version runs; `↻` keeps running
+the old installation and fails once Herdr has removed it.
+
 To run from a checkout during development, without installing:
 `bin/herdr-blocked-hud` (or `python3 -m herdr_blocked_hud`).
 
 Releases: before starting the work, `bin/bump-version X.Y.Z` (sets `version`
-in `pyproject.toml` and the install tag above), so a build run from the
+in `pyproject.toml` and `herdr-plugin.toml` and the install tag above), so a build run from the
 checkout is never mistaken for the installed release; then do the work, run
 the tests, commit, and tag `vX.Y.Z`.
 

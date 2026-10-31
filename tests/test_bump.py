@@ -12,6 +12,7 @@ README = (
     "uv tool install git+https://github.com/orgoj/herdr-blocked-hud@v0.1.4\n"
     "herdr-blocked-hud --demo\n"
 )
+MANIFEST = 'id = "orgoj.blocked-hud"\nversion = "0.1.4"\nmin_herdr_version = "0.7.5"\n'
 
 
 class BumpVersionTests(unittest.TestCase):
@@ -25,12 +26,16 @@ class BumpVersionTests(unittest.TestCase):
         shutil.copy(ROOT / "bin" / "bump-version", self.dir / "bin")
         self.write(PYPROJECT, README)
 
-    def write(self, pyproject, readme):
+    def write(self, pyproject, readme, manifest=MANIFEST):
         (self.dir / "pyproject.toml").write_text(pyproject)
         (self.dir / "README.md").write_text(readme)
+        (self.dir / "herdr-plugin.toml").write_text(manifest)
 
     def files(self):
-        return ((self.dir / "pyproject.toml").read_text(), (self.dir / "README.md").read_text())
+        return tuple(
+            (self.dir / name).read_text()
+            for name in ("pyproject.toml", "README.md", "herdr-plugin.toml")
+        )
 
     def bump(self, *args):
         return subprocess.run(
@@ -49,9 +54,10 @@ class BumpVersionTests(unittest.TestCase):
         result = self.bump("0.2.0")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "0.1.4 -> 0.2.0\n")
-        pyproject, readme = self.files()
+        pyproject, readme, manifest = self.files()
         self.assertEqual(pyproject, PYPROJECT.replace("0.1.4", "0.2.0"))
         self.assertEqual(readme, README.replace("@v0.1.4", "@v0.2.0"))
+        self.assertEqual(manifest, MANIFEST.replace('"0.1.4"', '"0.2.0"'))
 
     def test_numeric_not_lexical_comparison(self):
         self.write(PYPROJECT.replace("0.1.4", "0.9.0"), README.replace("0.1.4", "0.9.0"))
@@ -73,6 +79,10 @@ class BumpVersionTests(unittest.TestCase):
 
     def test_readme_without_tag_changes_nothing(self):
         self.write(PYPROJECT, "no install line\n")
+        self.assert_rejected("0.2.0", message="expected one version in")
+
+    def test_manifest_without_version_changes_nothing(self):
+        self.write(PYPROJECT, README, 'id = "x"\n')
         self.assert_rejected("0.2.0", message="expected one version in")
 
 
