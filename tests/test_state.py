@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from herdr_blocked_hud.app import clamp
+from herdr_blocked_hud.app import clamp, resize
 from herdr_blocked_hud.state import HudSettings, load, save, state_path
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -56,6 +56,26 @@ class StateFileTests(unittest.TestCase):
                 load(self.path, "top-right"), HudSettings("top-right", (5, 6), frozenset(muted))
             )
 
+    def test_width_applies_only_under_the_config_width_it_was_saved_with(self):
+        save(self.path, HudSettings("top-right", (1, 2), width=250, config_width=320))
+        self.assertEqual(load(self.path, "top-right", 320),
+                         HudSettings("top-right", (1, 2), width=250, config_width=320))
+        self.assertEqual(load(self.path, "top-right", 400), HudSettings("top-right", (1, 2)))
+        self.assertEqual(load(self.path, "bottom-left", 320),
+                         HudSettings("bottom-left", width=250, config_width=320))
+        # No width saved: the file has no width keys.
+        save(self.path, HudSettings("top-right", (1, 2)))
+        self.assertNotIn("width", self.path.read_text())
+        self.assertEqual(load(self.path, "top-right", 320), HudSettings("top-right", (1, 2)))
+
+    def test_malformed_width_voids_the_file(self):
+        self.path.parent.mkdir()
+        base = '{"offset": [5, 6], "corner": "top-right", "muted": []'
+        for extra in (', "width": 250', ', "width": "wide", "config_width": 320',
+                      ', "width": 0, "config_width": 320', ', "width": true, "config_width": 320'):
+            self.path.write_text(base + extra + "}")
+            self.assertEqual(self.load_quietly(), HudSettings("top-right"), extra)
+
     def test_failed_save_is_reported_not_raised(self):
         self.path.parent.mkdir()
         self.path.mkdir()          # a directory where the file should be
@@ -72,6 +92,14 @@ class StateFileTests(unittest.TestCase):
                 state_path(),
                 pathlib.Path(os.path.expanduser("~/.local/state/herdr-blocked-hud/state.json")),
             )
+
+
+class ResizeTests(unittest.TestCase):
+    def test_opposite_edge_stays_and_width_is_bounded(self):
+        self.assertEqual(resize("right", 600, 320, -100, 1000), (600, 220))
+        self.assertEqual(resize("left", 600, 320, -100, 1000), (500, 420))
+        self.assertEqual(resize("left", 600, 320, 300, 1000), (720, 200))
+        self.assertEqual(resize("right", 600, 320, 5000, 1000), (600, 1000))
 
 
 class ClampTests(unittest.TestCase):

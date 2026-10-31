@@ -1,4 +1,4 @@
-"""HUD state remembered across runs: dragged position and mute.
+"""HUD state remembered across runs: dragged position, width and mute.
 
 Kept apart from the hand-written config.toml, which the HUD never writes.
 """
@@ -19,6 +19,10 @@ class HudSettings:
     offset: tuple[int, int] = (0, 0)
     # Muted sound kinds, a subset of KINDS.
     muted: frozenset[str] = frozenset()
+    # Width dragged by an edge, None: config width. Like the offset for the
+    # corner, it is void when config width changed from `config_width`.
+    width: int | None = None
+    config_width: int | None = None
 
 
 KINDS = ("blocked", "done")
@@ -38,8 +42,10 @@ def state_path() -> pathlib.Path:
     return pathlib.Path(base) / "herdr-blocked-hud" / "state.json"
 
 
-def load(path: pathlib.Path, corner: str) -> HudSettings:
-    """Saved state; defaults for a missing or malformed file."""
+def load(path: pathlib.Path, corner: str, config_width: int | None = None) -> HudSettings:
+    """Saved state; defaults for a missing or malformed file.
+
+    A saved width applies only when it was saved under `config_width`."""
     try:
         data = json.loads(path.read_text())
     except FileNotFoundError:
@@ -53,17 +59,26 @@ def load(path: pathlib.Path, corner: str) -> HudSettings:
         return HudSettings(corner=corner)
     offset = data.get("offset")
     muted = parse_muted(data.get("muted"))
+    # Files from before the width was saved have neither key.
+    width, saved_config_width = data.get("width"), data.get("config_width")
     if not (
         muted is not None
         and isinstance(data.get("corner"), str)
         and isinstance(offset, list)
         and len(offset) == 2
         and all(type(value) is int for value in offset)
+        and (
+            width is saved_config_width is None
+            or all(type(v) is int and v > 0 for v in (width, saved_config_width))
+        )
     ):
         return HudSettings(corner=corner)
+    if width is None or saved_config_width != config_width:
+        width = None
+    sized = {"width": width, "config_width": config_width if width else None}
     if data["corner"] != corner:
-        return HudSettings(corner=corner, muted=muted)
-    return HudSettings(corner, (offset[0], offset[1]), muted)
+        return HudSettings(corner=corner, muted=muted, **sized)
+    return HudSettings(corner, (offset[0], offset[1]), muted, **sized)
 
 
 def save(path: pathlib.Path, settings: HudSettings) -> None:
@@ -73,6 +88,9 @@ def save(path: pathlib.Path, settings: HudSettings) -> None:
         "offset": list(settings.offset),
         "muted": [kind for kind in KINDS if kind in settings.muted],
     }
+    if settings.width is not None and settings.config_width is not None:
+        data["width"] = settings.width
+        data["config_width"] = settings.config_width
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")

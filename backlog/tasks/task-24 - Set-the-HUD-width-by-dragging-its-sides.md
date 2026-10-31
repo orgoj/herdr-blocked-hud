@@ -1,10 +1,11 @@
 ---
 id: TASK-24
 title: Set the HUD width by dragging its sides
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@hud_dev'
 created_date: '2026-10-31 09:13'
-updated_date: '2026-10-31 09:21'
+updated_date: '2026-10-31 09:31'
 labels: []
 dependencies: []
 type: feature

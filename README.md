@@ -23,8 +23,10 @@ or a right click dismisses a done row. On the top line, the red `♪` mutes
 and unmutes the blocked sound and the orange `♪` the done sound (each struck
 through and grey while muted; the HUD still appears), `↻` restarts the
 HUD with the same command (so a newly installed version starts) and `×`
-quits it. Drag the HUD with the left mouse button to move it. Position and
-mute are remembered across runs (see [State file](#state-file)). The
+quits it. Drag the HUD with the left mouse button to move it; drag its left
+or right edge (the pointer turns into a resize arrow) to change its width,
+between 200 px and the monitor width. Position, width and mute are
+remembered across runs (see [State file](#state-file)). The
 window disappears when nothing is listed. A blocked pane stays listed until
 it is no longer blocked, even while it is on screen in Herdr. If Herdr
 cannot be reached for three polls, a grey error row appears.
@@ -67,7 +69,7 @@ checkout does not affect the running HUD). The Python must include Tk; uv's
 managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.17
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.18
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -93,12 +95,13 @@ the tests, commit, and tag `vX.Y.Z`.
 
 ## State file
 
-The dragged position and the mute state are saved to
+The dragged position, the dragged width and the mute state are saved to
 `~/.local/state/herdr-blocked-hud/state.json` (respects `XDG_STATE_HOME`),
 never to the config file. The position is stored as the distance from the
 configured `corner`; after a `corner` change it is ignored, and the HUD is
 always kept fully on the monitor it was dragged to (on the nearest one when
-that monitor is gone). Delete the file to reset both. `--demo`
+that monitor is gone). Config `width` stays the default; a dragged width is
+ignored after a change of config `width`. Delete the file to reset them all. `--demo`
 neither reads nor writes it.
 
 ## Configuration
@@ -115,7 +118,7 @@ Unknown keys, wrong types and invalid regexes stop the HUD at startup.
 | `done_sound` | `"builtin"` | `"builtin"` (the HUD's own soft rising chime), a sound file, or `""` to disable |
 | `corner` | `"top-right"` | `top-right`, `top-left`, `bottom-right`, `bottom-left` of the primary monitor |
 | `margin_x`, `margin_y` | `24`, `36` | Pixels from that corner |
-| `width` | `320` | Window width in pixels (positive; margins must not be negative) |
+| `width` | `320` | Window width in pixels (positive; margins must not be negative); an edge drag overrides it |
 | `done.after_seconds` | `5` | How long an agent stays done before it is listed (positive) |
 | `done.sound_enabled` | `true` | Done sound on/off, independent of the blocked sound (and of statuses set to it) |
 | `done.status_regex` | `'^\s*STATUS:\s*(\S+)'` | Finds the agent's status line; group 1 is the status value |

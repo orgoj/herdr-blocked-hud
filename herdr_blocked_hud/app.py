@@ -28,6 +28,10 @@ from .source import Agent, Model, Poller, Session, SessionState, read_agent_tail
 DRAIN_MS = 100
 # Pointer travel (pixels) after which a left-button press becomes a drag.
 DRAG_THRESHOLD = 4
+# Width of the grab zones on the left and right edge (the frame's padding)
+# and the narrowest HUD an edge drag makes.
+EDGE = 6
+MIN_WIDTH = 200
 
 BG = "#1e1e2e"
 ROW_BG = "#313244"
@@ -93,23 +97,22 @@ def sound_for(
 
 
 def place(
-    monitor: tuple[int, int, int, int], config: Config, height: int
+    monitor: tuple[int, int, int, int], config: Config, height: int, width: int | None = None
 ) -> tuple[int, int]:
-    """Top-left corner of the HUD in the configured monitor corner."""
-    x, y, width, monitor_height = monitor
+    """Top-left corner of the HUD in the configured monitor corner; `width`
+    defaults to config width."""
+    x, y, monitor_width, monitor_height = monitor
+    width = config.width if width is None else width
     vertical, horizontal = config.corner.split("-")
-    left = x + config.margin_x if horizontal == "left" else x + width - config.width - config.margin_x
+    left = x + config.margin_x if horizontal == "left" else x + monitor_width - width - config.margin_x
     top = y + config.margin_y if vertical == "top" else y + monitor_height - height - config.margin_y
     return left, top
 
 
-def clamp(
-    monitors: list[tuple[int, int, int, int]], left: int, top: int, width: int, height: int
-) -> tuple[int, int]:
-    """Move a window of `width` x `height` at (left, top) fully onto one monitor:
-    the one holding the window's centre, else the one nearest to it (a saved
-    position on a monitor that is gone lands on an existing one)."""
-    cx, cy = left + width // 2, top + height // 2
+def monitor_at(
+    monitors: list[tuple[int, int, int, int]], cx: int, cy: int
+) -> tuple[int, int, int, int]:
+    """The monitor holding (cx, cy), else the one nearest to it."""
 
     def distance(monitor: tuple[int, int, int, int]) -> int:
         x, y, w, h = monitor
@@ -118,10 +121,32 @@ def clamp(
         return dx * dx + dy * dy
 
     # min() keeps the first of equals, so the primary wins ties.
-    x, y, monitor_width, monitor_height = min(monitors, key=distance)
+    return min(monitors, key=distance)
+
+
+def clamp(
+    monitors: list[tuple[int, int, int, int]], left: int, top: int, width: int, height: int
+) -> tuple[int, int]:
+    """Move a window of `width` x `height` at (left, top) fully onto one monitor:
+    the one holding the window's centre, else the one nearest to it (a saved
+    position on a monitor that is gone lands on an existing one)."""
+    x, y, monitor_width, monitor_height = monitor_at(
+        monitors, left + width // 2, top + height // 2
+    )
     left = max(x, min(left, x + monitor_width - width))
     top = max(y, min(top, y + monitor_height - height))
     return left, top
+
+
+def resize(
+    edge: str, left0: int, width0: int, dx: int, max_width: int
+) -> tuple[int, int]:
+    """(left, width) after dragging the `edge` ("left" or "right") of a window
+    at `left0`, `width0` by `dx`; the opposite edge stays in place and the
+    width stays within MIN_WIDTH..max_width."""
+    width = width0 + dx if edge == "right" else width0 - dx
+    width = max(MIN_WIDTH, min(width, max_width))
+    return (left0 if edge == "right" else left0 + width0 - width), width
 
 
 class Hud:
@@ -157,7 +182,7 @@ class Hud:
         self.exit_action: str | None = None
         self.state_file = state_file
         saved = (
-            state_module.load(state_file, config.corner)
+            state_module.load(state_file, config.corner, config.width)
             if state_file
             else state_module.HudSettings(config.corner)
         )
@@ -169,13 +194,27 @@ class Hud:
         root.overrideredirect(True)
         root.configure(bg=BG)
         root.withdraw()
-        self.frame = tk.Frame(root, bg=BG, padx=6, pady=6)
+        self.frame = tk.Frame(root, bg=BG, padx=EDGE, pady=6)
         self.frame.pack(fill=tk.BOTH, expand=True)
         # The corner position is on the primary monitor (listed first); a
         # dragged HUD may sit on any of them.
         self.monitors = x11.monitors() or [
             (0, 0, root.winfo_screenwidth(), root.winfo_screenheight())
         ]
+        # Width: config width unless an edge drag set another one. The WM
+        # cannot resize an override-redirect window, so the left and right
+        # padding are grab zones over the frame; a drag there resizes.
+        self.width = config.width
+        if saved.width is not None:
+            widest = max(monitor[2] for monitor in self.monitors)
+            self.width = max(MIN_WIDTH, min(saved.width, widest))
+        self.edges = {}
+        for edge in ("left", "right"):
+            zone = tk.Frame(root, bg=BG, width=EDGE, cursor="sb_h_double_arrow")
+            zone.place(relx=0 if edge == "left" else 1, x=0 if edge == "left" else -EDGE,
+                       y=0, width=EDGE, relheight=1)
+            self.edges[zone] = edge
+        self.resizing: tuple[str, int, int, int] | None = None
         # The WM cannot move an override-redirect window, so a left-button
         # drag anywhere in the HUD moves it. `offset` is the dragged distance
         # from the configured corner position; it keeps that corner's edges
@@ -207,8 +246,13 @@ class Hud:
     def drag_start(self, event: tk.Event) -> None:
         self.drag = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
         self.dragged = False
+        edge = self.edges.get(event.widget)
+        self.resizing = (edge, event.x_root, self.root.winfo_x(), self.width) if edge else None
 
     def drag_move(self, event: tk.Event) -> None:
+        if self.resizing is not None:
+            self.resize_move(event)
+            return
         if self.drag is None:
             return
         x0, y0, left0, top0 = self.drag
@@ -217,23 +261,43 @@ class Hud:
             return
         self.dragged = True
         left, top = left0 + dx, top0 + dy
-        placed_left, placed_top = place(self.monitors[0], self.config, self.root.winfo_height())
+        placed_left, placed_top = place(
+            self.monitors[0], self.config, self.root.winfo_height(), self.width
+        )
         self.offset = (left - placed_left, top - placed_top)
         self.root.geometry(f"+{left}+{top}")
+
+    def resize_move(self, event: tk.Event) -> None:
+        edge, x0, left0, width0 = self.resizing
+        dx = event.x_root - x0
+        if not self.dragged and abs(dx) < DRAG_THRESHOLD:
+            return
+        self.dragged = True
+        height = self.root.winfo_height()
+        monitor = monitor_at(self.monitors, left0 + width0 // 2, self.root.winfo_y() + height // 2)
+        left, self.width = resize(edge, left0, width0, dx, monitor[2])
+        placed_left, _ = place(self.monitors[0], self.config, height, self.width)
+        self.offset = (left - placed_left, self.offset[1])
+        # Re-render: the error text wraps to the new width.
+        self.render(self.rendered or View())
 
     def drag_end(self, _event: tk.Event) -> None:
         # Runs after the widget's release binding, which checks `dragged`.
         if self.dragged:
             self.save_state()
         self.drag = None
+        self.resizing = None
         self.dragged = False
 
     def save_state(self) -> None:
         if self.state_file:
+            sized = self.width != self.config.width
             state_module.save(
                 self.state_file,
                 state_module.HudSettings(
-                    self.config.corner, self.offset, frozenset(self.muted)
+                    self.config.corner, self.offset, frozenset(self.muted),
+                    width=self.width if sized else None,
+                    config_width=self.config.width if sized else None,
                 ),
             )
 
@@ -347,17 +411,17 @@ class Hud:
                 text=f"herdr unreachable: {view.error}",
                 bg=BG,
                 fg=ERROR_FG,
-                wraplength=self.config.width - 20,
+                wraplength=self.width - 20,
                 justify=tk.LEFT,
                 anchor="w",
             ).pack(fill=tk.X, pady=2)
         self.root.update_idletasks()
         height = self.frame.winfo_reqheight()
-        left, top = place(self.monitors[0], self.config, height)
+        left, top = place(self.monitors[0], self.config, height, self.width)
         left, top = clamp(
-            self.monitors, left + self.offset[0], top + self.offset[1], self.config.width, height
+            self.monitors, left + self.offset[0], top + self.offset[1], self.width, height
         )
-        self.root.geometry(f"{self.config.width}x{height}+{left}+{top}")
+        self.root.geometry(f"{self.width}x{height}+{left}+{top}")
 
     def header(self, text: str) -> None:
         label = tk.Label(

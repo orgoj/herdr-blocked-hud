@@ -197,7 +197,14 @@ Limits:
   a left-button drag inside the HUD moves it (TASK-16); the drag offset from
   the configured corner is kept, so the corner's edges stay put when the
   height changes. A press that moves less than `DRAG_THRESHOLD` pixels stays
-  a click. Offset (with its corner) and mute are saved to
+  a click. Width (TASK-24): the WM cannot resize the window either, so the
+  frame's left and right padding (`EDGE` px) are placed grab zones with a
+  `sb_h_double_arrow` cursor; a drag there changes the width, the opposite
+  edge stays, `MIN_WIDTH` 200 up to the monitor width, and the HUD re-renders
+  so the error text wraps to it. Config `width` stays the default; a dragged
+  width is saved with the config width it replaced and void when that
+  changes (like the offset with its corner). Offset (with its corner),
+  width and mute are saved to
   `$XDG_STATE_HOME/herdr-blocked-hud/state.json` (`state.py`, TASK-19), not
   to the hand-written config.toml. Every render clamps the window fully onto
   the monitor holding its centre, else onto the nearest monitor (all from

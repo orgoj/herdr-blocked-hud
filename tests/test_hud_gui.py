@@ -347,6 +347,88 @@ class HudGuiTests(unittest.TestCase):
         demo.toggle_mute("blocked")
         self.assertEqual(state_file.read_bytes(), before)
 
+    def test_edge_drag_resizes_and_the_width_survives_a_restart(self):
+        import dataclasses
+        import pathlib
+        import shutil
+        import tempfile
+        import tkinter as tk
+
+        from herdr_blocked_hud.app import Hud
+
+        root_dir = pathlib.Path(__file__).resolve().parent.parent / "tmp"
+        root_dir.mkdir(exist_ok=True)
+        directory = pathlib.Path(tempfile.mkdtemp(dir=root_dir))
+        self.addCleanup(shutil.rmtree, directory)
+        state_file = directory / "state.json"
+        view = View(blocked=(Row(agent("a"), "row a"),), error="x " * 200)
+
+        def run(config=Config()):
+            root = tk.Tk()
+
+            def destroy():
+                try:
+                    root.destroy()
+                except tk.TclError:
+                    pass
+
+            self.addCleanup(destroy)
+            hud = Hud(root, on_click=lambda a: None, config=config, state_file=state_file)
+            hud.monitors = [(0, 0, 1000, 800)]
+            hud.render(view)
+            root.deiconify()
+            root.update()
+            return root, hud
+
+        def edges(hud):
+            return {edge: zone for zone, edge in hud.edges.items()}
+
+        def drag(root, widget, start, end):
+            widget.event_generate("<ButtonPress-1>", x=2, y=2, rootx=start, rooty=60)
+            widget.event_generate("<B1-Motion>", x=2, y=2, rootx=end, rooty=60)
+            widget.event_generate("<ButtonRelease-1>", x=2, y=2, rootx=end, rooty=60)
+            root.update()
+            return root.winfo_x(), root.winfo_width()
+
+        def wrap(hud):
+            return [w for w in hud.frame.winfo_children()
+                    if w.winfo_class() == "Label"][-1].cget("wraplength")
+
+        root, hud = run()
+        zones = edges(hud)
+        self.assertEqual({z.cget("cursor") for z in zones.values()}, {"sb_h_double_arrow"})
+        # Top-right corner, margin 24: right edge at 976.
+        self.assertEqual((root.winfo_x(), root.winfo_width()), (656, 320))
+        self.assertEqual(drag(root, zones["right"], 975, 875), (656, 220))
+        self.assertEqual(wrap(hud), 200)
+        # The left edge moves, the right one (876) stays.
+        self.assertEqual(drag(root, zones["left"], 657, 557), (556, 320))
+        # Never narrower than 200 nor wider than the monitor.
+        self.assertEqual(drag(root, zones["right"], 875, 5000)[1], 1000)
+        self.assertEqual(drag(root, zones["left"], 1, 900)[1], 200)
+        resized = (root.winfo_x(), root.winfo_y(), root.winfo_width())
+        root.destroy()
+
+        root, hud = run()
+        self.assertEqual((root.winfo_x(), root.winfo_y(), root.winfo_width()), resized)
+        # A drag elsewhere still moves the HUD and keeps the width.
+        header = hud.top.winfo_children()[-1]
+        header.event_generate("<ButtonPress-1>", x=2, y=2, rootx=900, rooty=40)
+        header.event_generate("<B1-Motion>", x=2, y=2, rootx=800, rooty=40)
+        header.event_generate("<ButtonRelease-1>", x=2, y=2, rootx=800, rooty=40)
+        root.update()
+        self.assertEqual((root.winfo_x(), root.winfo_width()), (resized[0] - 100, 200))
+        root.destroy()
+
+        # Another config width voids the saved width; no file: config width.
+        root, hud = run(dataclasses.replace(Config(), width=400))
+        self.assertEqual(root.winfo_width(), 400)
+        root.destroy()
+        state_file.unlink()
+        root, hud = run()
+        self.assertEqual(root.winfo_width(), 320)
+        root.destroy()
+
     def drag(self, widget, start, end):
         """Left-button drag from root coordinates `start` to `end` over `widget`."""
         widget.event_generate("<ButtonPress-1>", x=2, y=2, rootx=start[0], rooty=start[1])
