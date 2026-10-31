@@ -215,6 +215,16 @@ Limits:
   one.
 - Clicks reach the rows without focusing the HUD (rows are labels with
   button bindings).
+- Refresh in place (TASK-28): `logic.layout()` turns a View into lines keyed
+  by what they are (header text, row pane + dismissible, error text). A
+  render keeps the widget of every key that stays and only changes its text,
+  creates or destroys widgets of lines that come or go, re-packs only when
+  the order changes and sets the geometry only when it changes. Destroying
+  and re-creating everything on each View change made the HUD flicker and
+  lost clicks whose press hit a widget gone by the release. Row handlers
+  look their agent up by key, so a kept row acts on the latest poll's agent.
+  Changes show at once even under a resting pointer (user: the pointer stays
+  on the top row while they click it and type in the terminal).
 
 ## 4a. Status-bar icon (TASK-20)
 

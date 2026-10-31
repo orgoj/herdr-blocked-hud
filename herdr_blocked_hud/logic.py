@@ -53,6 +53,45 @@ class LongDone:
     sound: str = "done"
 
 
+@dataclass(frozen=True)
+class Item:
+    """One line of the HUD. `key` names the widget that shows it: a line
+    keeps its widget while its key stays, and only its text is updated."""
+
+    key: tuple
+    text: str
+    agent: Agent | None = None
+
+
+def layout(view: View) -> tuple[Item, ...]:
+    """The lines of `view`, top to bottom: headers, rows, the error line."""
+    items: list[Item] = []
+    seen: set[tuple] = set()
+
+    def add(key: tuple, text: str, agent: Agent | None = None) -> None:
+        # Keys stay unique, so two lines never share one widget.
+        unique, n = key, 1
+        while unique in seen:
+            unique, n = (*key, n), n + 1
+        seen.add(unique)
+        items.append(Item(unique, text, agent))
+
+    if not view.visible:
+        add(("header", "Nothing waiting"), "Nothing waiting")
+    if view.blocked:
+        add(("header", "Blocked"), "Blocked")
+        for row in view.blocked:
+            add(("row", agent_key(row.agent), False), f"▶ {row.text}", row.agent)
+    for section in view.done:
+        add(("header", section.title), section.title)
+        for row in section.rows:
+            add(("row", agent_key(row.agent), True), f"▶ {row.text}", row.agent)
+    if view.error:
+        text = f"herdr unreachable: {view.error}"
+        add(("error", text), text)
+    return tuple(items)
+
+
 def agent_key(agent: Agent) -> tuple[str, str]:
     return (agent.session, agent.terminal_id)
 

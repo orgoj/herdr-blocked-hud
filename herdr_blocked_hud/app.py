@@ -22,7 +22,7 @@ from . import state as state_module
 from . import tray as tray_module
 from .config import Config, ConfigError
 from .focus import focus_agent
-from .logic import DoneTracker, HudState, LongDone, Row, View
+from .logic import DoneTracker, HudState, Item, LongDone, View, layout
 from .source import Agent, Model, Poller, Session, SessionState, read_agent_tail
 
 DRAIN_MS = 100
@@ -41,6 +41,7 @@ HEADER_FG = "#fab387"
 ERROR_FG = "#9399b2"
 # Has ↻ and ×; the default Tk fonts lack ↻ and show a box instead.
 CONTROL_FONT = ("DejaVu Sans", 11)
+HEADER_FONT = ("Sans", 10, "bold")
 # One mute button per sound, in the tray icon's colours (red, orange).
 SOUND_KINDS = ("blocked", "done")
 SOUND_FG = {"blocked": ROW_ACTIVE_BG, "done": HEADER_FG}
@@ -251,6 +252,34 @@ class Hud:
         self.menu_open = False
         self.menu.bind("<Map>", lambda _e: setattr(self, "menu_open", True))
         self.menu.bind("<Unmap>", lambda _e: setattr(self, "menu_open", False))
+        # The top line is built once: the first header (`title`) shares it
+        # with the mute, restart and quit buttons.
+        self.top = tk.Frame(self.frame, bg=BG)
+        self.top.pack(fill=tk.X)
+        for text, action in (("×", "quit"), ("↻", "restart")):
+            button = tk.Label(
+                self.top, text=text, bg=BG, fg=HEADER_FG, font=CONTROL_FONT, padx=4,
+                cursor="hand2",
+            )
+            button.pack(side=tk.RIGHT)
+            self.on_release(button, 1, lambda action=action: self.exit(action))
+        # Packed from the right: blocked ♪, done ♪, ↻, ×.
+        for kind in reversed(SOUND_KINDS):
+            button = mute_button(self.top)
+            button.pack(side=tk.RIGHT)
+            self.on_release(button, 1, lambda kind=kind: self.toggle_mute(kind))
+            self.mute_buttons[kind] = button
+        self.show_mute()
+        self.title = tk.Label(
+            self.top, text="", bg=BG, fg=HEADER_FG, font=HEADER_FONT, anchor="w",
+        )
+        self.title.pack(side=tk.LEFT, fill=tk.X, expand=True, pady=(0, 2))
+        # The lines below the top line by Item key, packed top to bottom
+        # in `order`; the agent each row acts on.
+        self.lines: dict[tuple, tuple[tk.Widget, tk.Label]] = {}
+        self.order: list[tuple] = []
+        self.agents: dict[tuple, Agent] = {}
+        self.geometry: str | None = None
 
     def drag_start(self, event: tk.Event) -> None:
         self.drag = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
@@ -275,6 +304,7 @@ class Hud:
         )
         self.offset = (left - placed_left, top - placed_top)
         self.root.geometry(f"+{left}+{top}")
+        self.geometry = None
 
     def resize_move(self, event: tk.Event) -> None:
         edge, x0, left0, width0 = self.resizing
@@ -382,6 +412,12 @@ class Hud:
         ))
 
     def render(self, view: View) -> None:
+        """Show `view`, changing only what differs from the shown lines.
+
+        Destroying and re-creating every widget on each change made the HUD
+        flicker and lost a click whose press reached a widget that was gone
+        by the release, so a line keeps its widget while its Item key stays.
+        """
         # Config or saved width alike: at least MIN_WIDTH, at most the width
         # of the monitor the HUD lands on (picked with the last height).
         height = self.root.winfo_height()
@@ -391,66 +427,74 @@ class Hud:
             top + self.offset[1] + height // 2,
         )
         self.width = bounded_width(self.width, monitor[2])
-        for child in self.frame.winfo_children():
-            child.destroy()
-        # The first header shares its line with the mute, restart and quit buttons.
-        self.top = tk.Frame(self.frame, bg=BG)
-        self.top.pack(fill=tk.X)
-        self.top_free = True
-        for text, action in (("×", "quit"), ("↻", "restart")):
-            button = tk.Label(
-                self.top, text=text, bg=BG, fg=HEADER_FG, font=CONTROL_FONT, padx=4,
-                cursor="hand2",
-            )
-            button.pack(side=tk.RIGHT)
-            self.on_release(button, 1, lambda action=action: self.exit(action))
-        # Packed from the right: blocked ♪, done ♪, ↻, ×.
-        self.mute_buttons = {}
-        for kind in reversed(SOUND_KINDS):
-            button = mute_button(self.top)
-            button.pack(side=tk.RIGHT)
-            self.on_release(button, 1, lambda kind=kind: self.toggle_mute(kind))
-            self.mute_buttons[kind] = button
-        self.show_mute()
+        items = layout(view)
+        title = ""
+        if items and items[0].key[0] == "header":
+            title, items = items[0].text, items[1:]
+        if self.title.cget("text") != title:
+            self.title.configure(text=title)
+        keys = [item.key for item in items]
+        for key in set(self.lines) - set(keys):
+            self.lines.pop(key)[0].destroy()
+            self.agents.pop(key, None)
+        for item in items:
+            if item.key not in self.lines:
+                self.lines[item.key] = self.line(item)
+            label = self.lines[item.key][1]
+            if label.cget("text") != item.text:
+                label.configure(text=item.text)
+            if item.agent is not None:
+                self.agents[item.key] = item.agent
+            if item.key[0] == "error":
+                label.configure(wraplength=self.width - 20)
+        if keys != self.order:
+            for key in self.order:
+                if key in self.lines:
+                    self.lines[key][0].pack_forget()
+            for key in keys:
+                widget = self.lines[key][0]
+                widget.pack(fill=tk.X, pady=(0, 2) if key[0] == "header" else 2)
+            self.order = keys
         self.rendered = view
-        if not view.visible:
-            self.header("Nothing waiting")
-        if view.blocked:
-            self.header("Blocked")
-            for row in view.blocked:
-                self.row(row)
-        for section in view.done:
-            self.header(section.title)
-            for row in section.rows:
-                self.row(row, dismissible=True)
-        if view.error:
-            tk.Label(
-                self.frame,
-                text=f"herdr unreachable: {view.error}",
-                bg=BG,
-                fg=ERROR_FG,
-                wraplength=self.width - 20,
-                justify=tk.LEFT,
-                anchor="w",
-            ).pack(fill=tk.X, pady=2)
         self.root.update_idletasks()
         height = self.frame.winfo_reqheight()
         left, top = place(self.monitors[0], self.config, height, self.width)
         left, top = clamp(
             self.monitors, left + self.offset[0], top + self.offset[1], self.width, height
         )
-        self.root.geometry(f"{self.width}x{height}+{left}+{top}")
+        geometry = f"{self.width}x{height}+{left}+{top}"
+        if geometry != self.geometry:
+            self.root.geometry(geometry)
+            self.geometry = geometry
 
-    def header(self, text: str) -> None:
+    def line(self, item: Item) -> tuple[tk.Widget, tk.Label]:
+        """New widgets for `item`: (the packed widget, the label with its text)."""
+        kind = item.key[0]
+        if kind == "header":
+            label = tk.Label(self.frame, bg=BG, fg=HEADER_FG, font=HEADER_FONT, anchor="w")
+            return label, label
+        if kind == "error":
+            label = tk.Label(self.frame, bg=BG, fg=ERROR_FG, justify=tk.LEFT, anchor="w")
+            return label, label
+        key, dismissible = item.key, item.key[2]
+        line = tk.Frame(self.frame, bg=ROW_BG)
         label = tk.Label(
-            self.top if self.top_free else self.frame,
-            text=text, bg=BG, fg=HEADER_FG, font=("Sans", 10, "bold"), anchor="w",
+            line, bg=ROW_BG, fg=FG, padx=8, pady=4, anchor="w", cursor="hand2",
         )
-        if self.top_free:
-            label.pack(side=tk.LEFT, fill=tk.X, expand=True, pady=(0, 2))
-            self.top_free = False
-        else:
-            label.pack(fill=tk.X, pady=(0, 2))
+        label.bind("<Enter>", lambda _e: label.configure(bg=ROW_ACTIVE_BG, fg=BG))
+        label.bind("<Leave>", lambda _e: label.configure(bg=ROW_BG, fg=FG))
+        # The agent of the latest poll: the row outlives the Agent it was made for.
+        self.on_release(label, 1, lambda: self.on_click(self.agents[key]))
+        if dismissible:
+            # Packed before the label so a long label cannot push it out.
+            close = tk.Label(line, text="×", bg=ROW_BG, fg=FG, padx=6, pady=4, cursor="hand2")
+            close.pack(side=tk.RIGHT)
+            close.bind("<Enter>", lambda _e: close.configure(bg=ROW_ACTIVE_BG, fg=BG))
+            close.bind("<Leave>", lambda _e: close.configure(bg=ROW_BG, fg=FG))
+            self.on_release(close, 1, lambda: self.on_dismiss(self.agents[key]))
+            on_release(label, 3, lambda: self.on_dismiss(self.agents[key]))
+        label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        return line, label
 
     def beep(self, view: View) -> None:
         """Every HUD sound goes through here, so the mute buttons cover it."""
@@ -478,32 +522,6 @@ class Hud:
         """End the main loop; main() then quits or restarts."""
         self.exit_action = action
         self.root.quit()
-
-    def row(self, row: Row, dismissible: bool = False) -> None:
-        line = tk.Frame(self.frame, bg=ROW_BG)
-        line.pack(fill=tk.X, pady=2)
-        label = tk.Label(
-            line,
-            text=f"▶ {row.text}",
-            bg=ROW_BG,
-            fg=FG,
-            padx=8,
-            pady=4,
-            anchor="w",
-            cursor="hand2",
-        )
-        label.bind("<Enter>", lambda _e: label.configure(bg=ROW_ACTIVE_BG, fg=BG))
-        label.bind("<Leave>", lambda _e: label.configure(bg=ROW_BG, fg=FG))
-        self.on_release(label, 1, lambda agent=row.agent: self.on_click(agent))
-        if dismissible:
-            # Packed before the label so a long label cannot push it out.
-            close = tk.Label(line, text="×", bg=ROW_BG, fg=FG, padx=6, pady=4, cursor="hand2")
-            close.pack(side=tk.RIGHT)
-            close.bind("<Enter>", lambda _e: close.configure(bg=ROW_ACTIVE_BG, fg=BG))
-            close.bind("<Leave>", lambda _e: close.configure(bg=ROW_BG, fg=FG))
-            self.on_release(close, 1, lambda agent=row.agent: self.on_dismiss(agent))
-            on_release(label, 3, lambda agent=row.agent: self.on_dismiss(agent))
-        label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
 
 def on_release(widget: tk.Widget, button: int, action: Callable[[], None]) -> None:

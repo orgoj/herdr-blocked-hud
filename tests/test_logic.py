@@ -82,5 +82,40 @@ class HudStateTests(unittest.TestCase):
         self.assertFalse(self.hud.update(model(agent("a"))).beep_blocked)
 
 
+class LayoutTests(unittest.TestCase):
+    def test_lines_and_their_keys(self):
+        from herdr_blocked_hud.logic import Row, Section, View, layout
+
+        a, b = agent("a"), agent("b", status="done")
+        items = layout(View(
+            blocked=(Row(a, "row a"),),
+            done=(Section("Done · DONE", (Row(b, "row b · 3m"),)),),
+            error="refused",
+        ))
+        self.assertEqual([(i.key, i.text) for i in items], [
+            (("header", "Blocked"), "Blocked"),
+            (("row", ("default", "a"), False), "▶ row a"),
+            (("header", "Done · DONE"), "Done · DONE"),
+            (("row", ("default", "b"), True), "▶ row b · 3m"),
+            (("error", "herdr unreachable: refused"), "herdr unreachable: refused"),
+        ])
+        self.assertEqual([i.agent for i in items], [None, a, None, b, None])
+        # The key names the line, not what it shows: elapsed time, focus and
+        # completion changes keep it.
+        later = layout(View(done=(Section("Done", (Row(
+            agent("b", status="done", focused=True), "row b · 4m"),)),)))
+        self.assertEqual(later[1].key, items[3].key)
+        self.assertEqual([i.key for i in layout(View())], [("header", "Nothing waiting")])
+
+    def test_keys_stay_unique(self):
+        from herdr_blocked_hud.logic import Row, Section, View, layout
+
+        a = agent("a", status="done")
+        items = layout(View(done=(Section("Done", (Row(a, "one"), Row(a, "two"))),)))
+        keys = [i.key for i in items]
+        self.assertEqual(len(set(keys)), 3)
+        self.assertEqual(keys[2], ("row", ("default", "a"), True, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

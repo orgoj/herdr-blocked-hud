@@ -240,6 +240,72 @@ class HudGuiTests(unittest.TestCase):
         menu.invoke(3)
         self.assertEqual(self.hud.exit_action, "quit")
 
+    def test_refresh_keeps_the_widgets_and_changes_only_what_is_shown(self):
+        import dataclasses
+        from unittest import mock
+
+        a, b = agent("a"), agent("b")
+        self.hud.show(View(done=(Section("Done", (Row(a, "row a · 1m"),)),)))
+        self.root.update()
+        line, label = self.hud.lines[("row", ("default", "a"), True)]
+        self.before = ([], [])
+        with mock.patch.object(self.root, "geometry") as geometry:
+            # Only hidden fields differ: no widget made or destroyed, no geometry.
+            focused = dataclasses.replace(a, focused=True, completion_seq=7, pane_id="w9:p1")
+            self.hud.show(View(done=(Section("Done", (Row(focused, "row a · 1m"),)),),
+                               beep_done=True))
+            self.root.update()
+            self.assertEqual(self.hud.lines[("row", ("default", "a"), True)], (line, label))
+            self.assertEqual(len(self.hud.frame.winfo_children()), 2)   # top line, row
+            # A text change updates the same label in place.
+            self.hud.show(View(done=(Section("Done", (Row(focused, "row a · 2m"),)),)))
+            self.root.update()
+            self.assertEqual(label.cget("text"), "▶ row a · 2m")
+            geometry.assert_not_called()
+        # The kept row acts on the agent of the latest poll.
+        self.press(label, 1)
+        self.assertEqual(self.clicked, [focused])
+        self.assertTrue(label.winfo_exists())
+        # A new row gets new widgets; the kept ones stay, gone ones go.
+        self.hud.show(View(blocked=(Row(b, "row b"),),
+                           done=(Section("Done", (Row(focused, "row a · 2m"),)),)))
+        self.root.update()
+        self.assertEqual(self.hud.lines[("row", ("default", "a"), True)], (line, label))
+        self.assertEqual(self.hud.title.cget("text"), "Blocked")
+        self.assertEqual([t for t, _ in self.labels()][-4:], ["▶ row a · 2m", "×", "▶ row b",
+                                                             "Done"])   # creation order
+        rows = sorted((w.winfo_rooty(), t) for t, w in self.labels() if t[0] in "▶D")
+        self.assertEqual([t for _, t in rows], ["▶ row b", "Done", "▶ row a · 2m"])
+        self.hud.show(View(blocked=(Row(b, "row b"),)))
+        self.root.update()
+        self.assertFalse(line.winfo_exists())
+        self.assertNotIn(("row", ("default", "a"), True), self.hud.agents)
+
+    def test_resting_pointer_clicks_whatever_row_is_on_top(self):
+        # The user keeps the pointer on the top row and clicks it again and
+        # again: the HUD changes at once under it, and a click acts on the
+        # row shown there now.
+        a, b = agent("a"), agent("b")
+        self.hud.show(View(blocked=(Row(a, "row a"), Row(b, "row b"))))
+        self.root.update()
+        top_row = self.hud.lines[("row", ("default", "a"), False)][1]
+        x = top_row.winfo_rootx() - self.root.winfo_rootx() + 5
+        y = top_row.winfo_rooty() - self.root.winfo_rooty() + 5
+        self.root.event_generate("<Motion>", warp=True, x=x, y=y)
+        self.root.update()
+
+        def click_under_pointer():
+            px, py = self.root.winfo_pointerxy()
+            widget = self.root.winfo_containing(px, py)
+            self.press(widget, 1)
+
+        self.before = ([], [])
+        click_under_pointer()
+        self.hud.show(View(blocked=(Row(b, "row b"),)))    # a answered: b moves up
+        self.root.update()
+        click_under_pointer()
+        self.assertEqual(self.clicked, [a, b])
+
     def test_open_tray_menu_is_not_covered_by_a_refresh(self):
         from unittest import mock
 
