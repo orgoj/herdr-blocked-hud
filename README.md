@@ -2,8 +2,10 @@
 
 > **Personal pilot project.** I wrote this for my own computer and the
 > tools I run on it (Lubuntu with LXQt and Openbox, X11, WezTerm, Herdr
-> 0.9.5). It may not work anywhere else, and I do not plan to support other
-> setups. It is not an official [Herdr](https://github.com/herdrdev/herdr)
+> 0.9.5). It is made specially for the persistent agents of my
+> [hcom fork](https://github.com/orgoj/hcom/blob/orgoj-rebuild/docs/agent.md),
+> whose replies end with a `STATUS:` line. It may not work anywhere else, and
+> I do not plan to support other setups. It is not an official [Herdr](https://github.com/herdrdev/herdr)
 > project and is not affiliated with it. Provided as is, without warranty of
 > any kind; see [LICENSE](LICENSE).
 
