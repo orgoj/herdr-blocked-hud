@@ -200,7 +200,9 @@ Limits:
   a click. Width (TASK-24): the WM cannot resize the window either, so the
   frame's left and right padding (`EDGE` px) are placed grab zones with a
   `sb_h_double_arrow` cursor; a drag there changes the width, the opposite
-  edge stays, `MIN_WIDTH` 200 up to the monitor width, and the HUD re-renders
+  edge stays and the moved one stops at the monitor's side, at least
+  `MIN_WIDTH` 200 (config width is bounded the same way at render, also by
+  the monitor width), and the HUD re-renders
   so the error text wraps to it. Config `width` stays the default; a dragged
   width is saved with the config width it replaced and void when that
   changes (like the offset with its corner). Offset (with its corner),

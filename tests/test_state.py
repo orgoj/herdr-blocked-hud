@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from herdr_blocked_hud.app import clamp, resize
+from herdr_blocked_hud.app import bounded_width, clamp, resize
 from herdr_blocked_hud.state import HudSettings, load, save, state_path
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -96,10 +96,16 @@ class StateFileTests(unittest.TestCase):
 
 class ResizeTests(unittest.TestCase):
     def test_opposite_edge_stays_and_width_is_bounded(self):
-        self.assertEqual(resize("right", 600, 320, -100, 1000), (600, 220))
-        self.assertEqual(resize("left", 600, 320, -100, 1000), (500, 420))
-        self.assertEqual(resize("left", 600, 320, 300, 1000), (720, 200))
-        self.assertEqual(resize("right", 600, 320, 5000, 1000), (600, 1000))
+        monitor = (100, 0, 1000, 800)
+        self.assertEqual(resize("right", 600, 320, -100, monitor), (600, 220))
+        self.assertEqual(resize("left", 600, 320, -100, monitor), (500, 420))
+        self.assertEqual(resize("left", 600, 320, 300, monitor), (720, 200))
+        # The moved edge stops at the monitor's side; the fixed one stays.
+        self.assertEqual(resize("right", 600, 320, 5000, monitor), (600, 500))
+        self.assertEqual(resize("left", 600, 320, -5000, monitor), (100, 820))
+
+    def test_bounded_width(self):
+        self.assertEqual([bounded_width(w, 1000) for w in (100, 320, 5000)], [200, 320, 1000])
 
 
 class ClampTests(unittest.TestCase):

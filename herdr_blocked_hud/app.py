@@ -139,14 +139,26 @@ def clamp(
 
 
 def resize(
-    edge: str, left0: int, width0: int, dx: int, max_width: int
+    edge: str, left0: int, width0: int, dx: int, monitor: tuple[int, int, int, int]
 ) -> tuple[int, int]:
     """(left, width) after dragging the `edge` ("left" or "right") of a window
-    at `left0`, `width0` by `dx`; the opposite edge stays in place and the
-    width stays within MIN_WIDTH..max_width."""
-    width = width0 + dx if edge == "right" else width0 - dx
-    width = max(MIN_WIDTH, min(width, max_width))
+    at `left0`, `width0` by `dx` on `monitor`; the opposite edge stays in
+    place, the moved one stops at the monitor's side, and the width is at
+    least MIN_WIDTH."""
+    x, _, monitor_width, _ = monitor
+    if edge == "right":
+        room = x + monitor_width - left0
+        width = width0 + dx
+    else:
+        room = left0 + width0 - x
+        width = width0 - dx
+    width = max(MIN_WIDTH, min(width, room))
     return (left0 if edge == "right" else left0 + width0 - width), width
+
+
+def bounded_width(width: int, monitor_width: int) -> int:
+    """`width` within MIN_WIDTH..monitor_width (config or saved width alike)."""
+    return min(max(width, MIN_WIDTH), monitor_width)
 
 
 class Hud:
@@ -204,10 +216,7 @@ class Hud:
         # Width: config width unless an edge drag set another one. The WM
         # cannot resize an override-redirect window, so the left and right
         # padding are grab zones over the frame; a drag there resizes.
-        self.width = config.width
-        if saved.width is not None:
-            widest = max(monitor[2] for monitor in self.monitors)
-            self.width = max(MIN_WIDTH, min(saved.width, widest))
+        self.width = config.width if saved.width is None else saved.width
         self.edges = {}
         for edge in ("left", "right"):
             zone = tk.Frame(root, bg=BG, width=EDGE, cursor="sb_h_double_arrow")
@@ -275,7 +284,7 @@ class Hud:
         self.dragged = True
         height = self.root.winfo_height()
         monitor = monitor_at(self.monitors, left0 + width0 // 2, self.root.winfo_y() + height // 2)
-        left, self.width = resize(edge, left0, width0, dx, monitor[2])
+        left, self.width = resize(edge, left0, width0, dx, monitor)
         placed_left, _ = place(self.monitors[0], self.config, height, self.width)
         self.offset = (left - placed_left, self.offset[1])
         # Re-render: the error text wraps to the new width.
@@ -373,6 +382,15 @@ class Hud:
         ))
 
     def render(self, view: View) -> None:
+        # Config or saved width alike: at least MIN_WIDTH, at most the width
+        # of the monitor the HUD lands on (picked with the last height).
+        height = self.root.winfo_height()
+        left, top = place(self.monitors[0], self.config, height, self.width)
+        monitor = monitor_at(
+            self.monitors, left + self.offset[0] + self.width // 2,
+            top + self.offset[1] + height // 2,
+        )
+        self.width = bounded_width(self.width, monitor[2])
         for child in self.frame.winfo_children():
             child.destroy()
         # The first header shares its line with the mute, restart and quit buttons.

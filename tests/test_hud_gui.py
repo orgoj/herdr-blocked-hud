@@ -403,9 +403,12 @@ class HudGuiTests(unittest.TestCase):
         self.assertEqual(wrap(hud), 200)
         # The left edge moves, the right one (876) stays.
         self.assertEqual(drag(root, zones["left"], 657, 557), (556, 320))
-        # Never narrower than 200 nor wider than the monitor.
-        self.assertEqual(drag(root, zones["right"], 875, 5000)[1], 1000)
-        self.assertEqual(drag(root, zones["left"], 1, 900)[1], 200)
+        # Never narrower than 200; the moved edge stops at the monitor side
+        # and the fixed one stays.
+        self.assertEqual(drag(root, zones["right"], 875, 5000), (556, 444))
+        self.assertEqual(drag(root, zones["left"], 557, 5000), (800, 200))
+        self.assertEqual(drag(root, zones["left"], 801, -5000), (0, 1000))
+        self.assertEqual(drag(root, zones["left"], 1, 900), (800, 200))
         resized = (root.winfo_x(), root.winfo_y(), root.winfo_width())
         root.destroy()
 
@@ -425,6 +428,11 @@ class HudGuiTests(unittest.TestCase):
         self.assertEqual(root.winfo_width(), 400)
         root.destroy()
         state_file.unlink()
+        # A config width is bounded too: 200 up to the monitor width.
+        for config_width, shown in ((100, 200), (5000, 1000)):
+            root, hud = run(dataclasses.replace(Config(), width=config_width))
+            self.assertEqual(root.winfo_width(), shown)
+            root.destroy()
         root, hud = run()
         self.assertEqual(root.winfo_width(), 320)
         root.destroy()

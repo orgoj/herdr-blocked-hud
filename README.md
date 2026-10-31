@@ -118,7 +118,7 @@ Unknown keys, wrong types and invalid regexes stop the HUD at startup.
 | `done_sound` | `"builtin"` | `"builtin"` (the HUD's own soft rising chime), a sound file, or `""` to disable |
 | `corner` | `"top-right"` | `top-right`, `top-left`, `bottom-right`, `bottom-left` of the primary monitor |
 | `margin_x`, `margin_y` | `24`, `36` | Pixels from that corner |
-| `width` | `320` | Window width in pixels (positive; margins must not be negative); an edge drag overrides it |
+| `width` | `320` | Window width in pixels (positive; margins must not be negative); shown within 200 px and the monitor width; an edge drag overrides it |
 | `done.after_seconds` | `5` | How long an agent stays done before it is listed (positive) |
 | `done.sound_enabled` | `true` | Done sound on/off, independent of the blocked sound (and of statuses set to it) |
 | `done.status_regex` | `'^\s*STATUS:\s*(\S+)'` | Finds the agent's status line; group 1 is the status value |
