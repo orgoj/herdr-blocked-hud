@@ -115,7 +115,9 @@ To run from a checkout during development, without installing:
 Releases: before starting the work, `bin/bump-version X.Y.Z` (sets `version`
 in `pyproject.toml` and `herdr-plugin.toml` and the install tag above), so a build run from the
 checkout is never mistaken for the installed release; then do the work, run
-the tests, commit, and tag `vX.Y.Z`.
+the tests, commit, and tag `vX.Y.Z`. Only changes to what is installed or run
+(`herdr_blocked_hud/`, `pyproject.toml`, `herdr-plugin.toml`, `bin/`) are
+releases; README, docs, tests and backlog changes need no bump or tag.
 
 ## State file
 

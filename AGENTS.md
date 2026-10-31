@@ -11,5 +11,7 @@ click, and hides itself when nothing is blocked.
   `xvfb-run -a env HUD_GUI_TESTS=1 python3 tests/run`.
 - Release: `bin/bump-version X.Y.Z` (pyproject.toml, herdr-plugin.toml and
   the README install tag) before starting the work, then the work, `python3 tests/run`, commit,
-  annotated tag `vX.Y.Z`.
+  annotated tag `vX.Y.Z`. Only changes to what is installed or run
+  (`herdr_blocked_hud/`, `pyproject.toml`, `herdr-plugin.toml`, `bin/`) are
+  releases; README, docs, tests and backlog changes need no bump or tag.
 - Temporary files only in `tmp/` (gitignored).
