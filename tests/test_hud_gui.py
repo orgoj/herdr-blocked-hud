@@ -195,6 +195,24 @@ class HudGuiTests(unittest.TestCase):
         menu.invoke(2)
         self.assertEqual(self.hud.exit_action, "quit")
 
+    def test_open_tray_menu_is_not_covered_by_a_refresh(self):
+        from unittest import mock
+
+        view = View(blocked=(Row(agent("a"), "row a"),))
+        self.hud.show(view)
+        self.root.update()
+        self.hud.tray_event(("menu", 50, 50))
+        self.root.update()
+        self.assertTrue(self.hud.menu_open)
+        with mock.patch.object(self.root, "lift") as lift:
+            self.hud.show(view)
+            lift.assert_not_called()
+            self.hud.menu.unpost()
+            self.root.update()
+            self.assertFalse(self.hud.menu_open)
+            self.hud.show(view)
+            lift.assert_called_once()
+
     def test_hud_reports_its_state_to_the_tray(self):
         import queue
         import tkinter as tk

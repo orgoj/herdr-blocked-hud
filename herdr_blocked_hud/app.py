@@ -159,6 +159,9 @@ class Hud:
                                   command=self.toggle_mute)
         self.menu.add_command(label="Restart", command=lambda: self.exit("restart"))
         self.menu.add_command(label="Quit", command=lambda: self.exit("quit"))
+        self.menu_open = False
+        self.menu.bind("<Map>", lambda _e: setattr(self, "menu_open", True))
+        self.menu.bind("<Unmap>", lambda _e: setattr(self, "menu_open", False))
 
     def drag_start(self, event: tk.Event) -> None:
         self.drag = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
@@ -240,7 +243,9 @@ class Hud:
         if not self.mapped:
             self.root.deiconify()
             self.mapped = True
-        self.root.lift()
+        # Raising the HUD while the tray menu is open would cover the menu.
+        if not self.menu_open:
+            self.root.lift()
 
     def tray_event(self, event: tuple) -> None:
         if event[0] == "activate":
