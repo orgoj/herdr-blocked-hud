@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import tkinter.font as tkfont
 import traceback
 from typing import Callable
 
@@ -36,6 +37,23 @@ HEADER_FG = "#fab387"
 ERROR_FG = "#9399b2"
 # Has ↻ and ×; the default Tk fonts lack ↻ and show a box instead.
 CONTROL_FONT = ("DejaVu Sans", 11)
+# One mute button per sound, in the tray icon's colours (red, orange).
+SOUND_KINDS = ("blocked", "done")
+SOUND_FG = {"blocked": ROW_ACTIVE_BG, "done": HEADER_FG}
+
+
+def mute_button(parent: tk.Widget) -> tk.Canvas:
+    """A ♪ of CONTROL_FONT with a hidden diagonal strike, fixed size."""
+    font = tkfont.Font(root=parent, font=CONTROL_FONT)
+    width, height = font.measure("♪") + 8, font.metrics("linespace")
+    canvas = tk.Canvas(
+        parent, width=width, height=height, bg=BG, highlightthickness=0, bd=0,
+        cursor="hand2",
+    )
+    canvas.create_text(width // 2, height // 2, text="♪", font=CONTROL_FONT, tags="note")
+    canvas.create_line(3, height - 3, width - 3, 3, width=2, fill=ERROR_FG,
+                       state=tk.HIDDEN, tags="strike")
+    return canvas
 
 
 def play(path: str) -> None:
@@ -51,12 +69,17 @@ def play(path: str) -> None:
 
 
 def sound_for(
-    view: View, config: Config, builtin: Callable[[str], str] = sounds.builtin_path
+    view: View,
+    config: Config,
+    builtin: Callable[[str], str] = sounds.builtin_path,
+    *,
+    muted: frozenset[str] = frozenset(),
 ) -> str | None:
-    """One sound per poll; blocked wins. The done switch leaves blocked alone."""
-    if view.beep_blocked:
+    """One sound per poll; blocked wins unless muted. The done switches
+    (`done.sound_enabled`, the done mute) leave blocked alone."""
+    if view.beep_blocked and "blocked" not in muted:
         kind, setting = "blocked", config.blocked_sound
-    elif view.beep_done and config.done.sound_enabled:
+    elif view.beep_done and config.done.sound_enabled and "done" not in muted:
         kind, setting = "done", config.done_sound
     else:
         return None
@@ -123,7 +146,7 @@ class Hud:
         self.mapped = False
         self.forced: bool | None = None
         self.rendered: View | None = None
-        self.mute_button: tk.Label | None = None
+        self.mute_buttons: dict[str, tk.Canvas] = {}
         self.on_click = on_click
         self.on_dismiss = on_dismiss
         self.config = config
@@ -138,8 +161,8 @@ class Hud:
             if state_file
             else state_module.HudSettings(config.corner)
         )
-        # The ♪ button silences every HUD sound.
-        self.muted = saved.muted
+        # Muted sound kinds ("blocked", "done"), one ♪ button each.
+        self.muted: set[str] = set(saved.muted)
 
         # Override-redirect: Openbox neither manages nor focuses the window,
         # it shows on every desktop, and `lift()` keeps it on top.
@@ -167,9 +190,14 @@ class Hud:
         root.bind("<ButtonRelease-1>", self.drag_end)
         # Tray right-click menu: the same actions as the top-line buttons.
         self.menu = tk.Menu(root, tearoff=False)
-        self.menu_mute = tk.BooleanVar(root, value=self.muted)
-        self.menu.add_checkbutton(label="Mute", variable=self.menu_mute,
-                                  command=self.toggle_mute)
+        self.menu_mute = {
+            kind: tk.BooleanVar(root, value=kind in self.muted) for kind in SOUND_KINDS
+        }
+        for kind in SOUND_KINDS:
+            self.menu.add_checkbutton(
+                label=f"Mute {kind} sound", variable=self.menu_mute[kind],
+                command=lambda kind=kind: self.toggle_mute(kind),
+            )
         self.menu.add_command(label="Restart", command=lambda: self.exit("restart"))
         self.menu.add_command(label="Quit", command=lambda: self.exit("quit"))
         self.menu_open = False
@@ -204,7 +232,9 @@ class Hud:
         if self.state_file:
             state_module.save(
                 self.state_file,
-                state_module.HudSettings(self.config.corner, self.offset, self.muted),
+                state_module.HudSettings(
+                    self.config.corner, self.offset, frozenset(self.muted)
+                ),
             )
 
     def on_release(self, widget: tk.Widget, button: int, action: Callable[[], None]) -> None:
@@ -234,9 +264,7 @@ class Hud:
         self.root.after(DRAIN_MS, self.start_draining)
 
     def show(self, view: View) -> None:
-        sound = sound_for(view, self.config)
-        if sound:
-            self.play(sound)
+        self.beep(view)
         if view.beep_blocked or view.beep_done:
             self.forced = None
         self.apply(view)
@@ -266,7 +294,8 @@ class Hud:
             self.forced = not self.mapped
             self.apply(self.shown or View())
         elif event[0] == "menu":
-            self.menu_mute.set(self.muted)
+            for kind, variable in self.menu_mute.items():
+                variable.set(kind in self.muted)
             self.menu.tk_popup(event[1], event[2])
 
     def update_tray(self) -> None:
@@ -276,7 +305,7 @@ class Hud:
         self.tray.set_state(tray_module.TrayState(
             blocked=len(view.blocked),
             done=sum(len(section.rows) for section in view.done),
-            muted=self.muted,
+            muted=frozenset(self.muted),
         ))
 
     def render(self, view: View) -> None:
@@ -293,9 +322,13 @@ class Hud:
             )
             button.pack(side=tk.RIGHT)
             self.on_release(button, 1, lambda action=action: self.exit(action))
-        self.mute_button = tk.Label(self.top, bg=BG, padx=4, cursor="hand2")
-        self.mute_button.pack(side=tk.RIGHT)
-        self.on_release(self.mute_button, 1, self.toggle_mute)
+        # Packed from the right: blocked ♪, done ♪, ↻, ×.
+        self.mute_buttons = {}
+        for kind in reversed(SOUND_KINDS):
+            button = mute_button(self.top)
+            button.pack(side=tk.RIGHT)
+            self.on_release(button, 1, lambda kind=kind: self.toggle_mute(kind))
+            self.mute_buttons[kind] = button
         self.show_mute()
         self.rendered = view
         if not view.visible:
@@ -337,25 +370,27 @@ class Hud:
         else:
             label.pack(fill=tk.X, pady=(0, 2))
 
-    def play(self, sound: str) -> None:
-        """Every HUD sound goes through here, so the mute button covers it."""
-        if not self.muted:
+    def beep(self, view: View) -> None:
+        """Every HUD sound goes through here, so the mute buttons cover it."""
+        sound = sound_for(view, self.config, muted=frozenset(self.muted))
+        if sound:
             play(sound)
 
-    def toggle_mute(self) -> None:
-        self.muted = not self.muted
+    def toggle_mute(self, kind: str) -> None:
+        self.muted ^= {kind}
         self.show_mute()
         self.save_state()
         self.update_tray()
 
     def show_mute(self) -> None:
-        """Struck-through grey note while muted, plain note while sound plays."""
-        if self.mute_button is None:
-            return
-        if self.muted:
-            self.mute_button.configure(text="♪", fg=ERROR_FG, font=(*CONTROL_FONT, "overstrike"))
-        else:
-            self.mute_button.configure(text="♪", fg=HEADER_FG, font=CONTROL_FONT)
+        """Grey struck-through note while muted, coloured note while sound plays.
+
+        The strike is a canvas line, not an overstrike font, so both states
+        have the same size."""
+        for kind, button in self.mute_buttons.items():
+            muted = kind in self.muted
+            button.itemconfigure("note", fill=ERROR_FG if muted else SOUND_FG[kind])
+            button.itemconfigure("strike", state=tk.NORMAL if muted else tk.HIDDEN)
 
     def exit(self, action: str) -> None:
         """End the main loop; main() then quits or restarts."""
@@ -412,9 +447,7 @@ def start_demo(root: tk.Tk, config: Config) -> Hud:
     hud.start_draining()
     # The first reading never beeps, so let the user hear both sounds here.
     for delay, view in ((300, View(beep_blocked=True)), (2500, View(beep_done=True))):
-        sound = sound_for(view, config)
-        if sound:
-            root.after(delay, hud.play, sound)
+        root.after(delay, hud.beep, view)
     root.after(8000, root.destroy)
     return hud
 

@@ -83,7 +83,8 @@ INTROSPECTION = f"""<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Intr
 class TrayState:
     blocked: int = 0
     done: int = 0
-    muted: bool = False
+    # Muted sound kinds: "blocked", "done".
+    muted: frozenset[str] = frozenset()
 
     @property
     def color(self) -> int:
@@ -92,7 +93,12 @@ class TrayState:
     @property
     def tooltip(self) -> str:
         text = f"{self.blocked} blocked, {self.done} done"
-        return text + " · muted" if self.muted else text
+        if {"blocked", "done"} <= self.muted:
+            return text + " · muted"
+        for kind in ("blocked", "done"):
+            if kind in self.muted:
+                return text + f" · {kind} muted"
+        return text
 
 
 def pixmap(size: int, color: int) -> tuple[int, int, bytes]:

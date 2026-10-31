@@ -96,8 +96,8 @@ def parse(data: dict) -> Config:
             raise ConfigError(f"{key} must not be negative")
     if done.get("after_seconds", 5) <= 0:
         raise ConfigError("done.after_seconds must be positive")
-    if any(not isinstance(m, str) for m in done.get("modes", {}).values()):
-        raise ConfigError("done.modes values must be strings")
+    if any(not isinstance(m, (str, dict)) for m in done.get("modes", {}).values()):
+        raise ConfigError("done.modes values must be strings or tables")
     if done.get("read_lines", 80) <= 0:
         raise ConfigError("done.read_lines must be positive")
     try:

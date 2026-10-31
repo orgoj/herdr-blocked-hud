@@ -258,7 +258,17 @@ that stay `done` (finished, not yet seen) longer than a threshold.
 - Sound when a row enters a section while its pane is `done`: own switch
   `done.sound_enabled` (default `true`) and file `done.sound`, default a
   quieter sound than blocked. Turning it off leaves the blocked sound
-  untouched.
+  untouched. A `[done.modes]` table value `{ mode = ..., sound = "blocked" }`
+  makes that status play the blocked sound instead (TASK-23): the tracker
+  puts the sound on each `LongDone`, and `HudState` raises `beep_blocked`
+  for it, so `done.sound_enabled` and the done mute leave it alone.
+- Mute (TASK-23): two canvas `♪` buttons on the top line, red for the
+  blocked sound and orange for the done sound, plus matching tray menu
+  check items. A mute silences the sound actually played; with blocked
+  muted, a poll that also beeps done plays the done sound. The strike is a
+  canvas line, so a muted button keeps its size (an overstrike font looked
+  bigger). The state file stores `muted` as a list of kinds; an old bool
+  mutes both or none.
 - Click: same as blocked (focus pane, raise window). `×` or a right click
   dismisses the row for that completion.
 - Top line: `↻` restarts (exec of `sys.executable` with the original argv,
@@ -277,6 +287,7 @@ no_status_mode = "transient"   # no status line, or the read failed
 read_lines = 80                # recent rows read once per completion
 
 [done.modes]                   # value -> transient | sticky | hide
+# or a table: NEEDS_USER = { mode = "sticky", sound = "blocked" }
 ```
 
 - `transient`: the row disappears when the pane leaves `done`: user views it

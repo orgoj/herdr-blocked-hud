@@ -25,8 +25,11 @@ class StateFileTests(unittest.TestCase):
             return load(self.path, corner)
 
     def test_round_trip_creates_the_directory_atomically(self):
-        save(self.path, HudSettings("top-right", (-40, 12), True))
-        self.assertEqual(load(self.path, "top-right"), HudSettings("top-right", (-40, 12), True))
+        for muted in (frozenset(), frozenset({"done"}), frozenset({"blocked", "done"})):
+            save(self.path, HudSettings("top-right", (-40, 12), muted))
+            self.assertEqual(
+                load(self.path, "top-right"), HudSettings("top-right", (-40, 12), muted)
+            )
         self.assertEqual(sorted(p.name for p in self.path.parent.iterdir()), ["state.json"])
 
     def test_missing_or_malformed_file_gives_defaults(self):
@@ -35,13 +38,23 @@ class StateFileTests(unittest.TestCase):
         for text in ("{not json", "[1, 2]", '{"offset": "x", "muted": 1, "corner": "top-right"}',
                      '{"offset": [1.5, 2], "corner": "top-right", "muted": true}',
                      '{"offset": [20, 30], "corner": "top-right", "muted": "yes"}',
+                     '{"offset": [20, 30], "corner": "top-right", "muted": ["all"]}',
                      '{"offset": [20, 30], "corner": "top-right"}'):
             self.path.write_text(text)
             self.assertEqual(self.load_quietly(), HudSettings("top-right"), text)
 
     def test_offset_from_another_corner_is_ignored_but_mute_kept(self):
-        save(self.path, HudSettings("bottom-left", (30, -30), True))
-        self.assertEqual(load(self.path, "top-right"), HudSettings("top-right", (0, 0), True))
+        muted = frozenset({"blocked"})
+        save(self.path, HudSettings("bottom-left", (30, -30), muted))
+        self.assertEqual(load(self.path, "top-right"), HudSettings("top-right", (0, 0), muted))
+
+    def test_old_single_mute_mutes_both_sounds(self):
+        self.path.parent.mkdir()
+        for old, muted in (("true", {"blocked", "done"}), ("false", set())):
+            self.path.write_text(f'{{"offset": [5, 6], "corner": "top-right", "muted": {old}}}')
+            self.assertEqual(
+                load(self.path, "top-right"), HudSettings("top-right", (5, 6), frozenset(muted))
+            )
 
     def test_failed_save_is_reported_not_raised(self):
         self.path.parent.mkdir()

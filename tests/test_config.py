@@ -47,6 +47,21 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(loaded.done.default_mode, "sticky")
         self.assertEqual(loaded.done.modes, {"DONE": "hide"})
 
+    def test_mode_table_sets_the_sound(self):
+        loaded = config.load(self.write(
+            '[done.modes]\nDONE = "transient"\n'
+            'NEEDS_USER = { mode = "sticky", sound = "blocked" }\n'
+            'WAITING = { mode = "sticky", sound = "done" }\n'
+            'INFO = { mode = "hide" }\n'
+        ))
+        done = loaded.done
+        self.assertEqual(done.mode_of, {
+            "DONE": "transient", "NEEDS_USER": "sticky", "WAITING": "sticky", "INFO": "hide",
+        })
+        self.assertEqual(done.sound_of, {
+            "DONE": "done", "NEEDS_USER": "blocked", "WAITING": "done", "INFO": "done",
+        })
+
     def test_errors(self):
         cases = {
             "colour = 1\n": "unknown key colour",
@@ -66,7 +81,11 @@ class LoadTests(unittest.TestCase):
             '[done]\ndefault_mode = "keep"\n': "mode 'keep' is not one of",
             '[done]\nno_status_mode = "sticky "\n': "is not one of",
             '[done.modes]\nDONE = "gone"\n': "is not one of",
-            "[done.modes]\nDONE = 1\n": "modes values must be strings",
+            "[done.modes]\nDONE = 1\n": "modes values must be strings or tables",
+            '[done.modes]\nX = { mode = "sticky", sound = "loud" }\n': "sound 'loud' is not one of",
+            '[done.modes]\nX = { sound = "blocked" }\n': "modes.X: missing mode",
+            '[done.modes]\nX = { mode = "sticky", volume = 1 }\n': "modes.X: unknown key volume",
+            '[done.modes]\nX = { mode = "keep" }\n': "mode 'keep' is not one of",
             "[done]\nmodes = 1\n": "done.modes has the wrong type",
             "done = 1\n": "must be a table",
             "width = \n": "config.toml",

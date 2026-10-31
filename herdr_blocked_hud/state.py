@@ -17,7 +17,20 @@ class HudSettings:
     # Corner the offset was dragged from; an offset from another corner is void.
     corner: str = ""
     offset: tuple[int, int] = (0, 0)
-    muted: bool = False
+    # Muted sound kinds, a subset of KINDS.
+    muted: frozenset[str] = frozenset()
+
+
+KINDS = ("blocked", "done")
+
+
+def parse_muted(value: object) -> frozenset[str] | None:
+    """A list of kinds; the old single-button bool mutes both or none."""
+    if isinstance(value, bool):
+        return frozenset(KINDS) if value else frozenset()
+    if isinstance(value, list) and all(kind in KINDS for kind in value):
+        return frozenset(value)
+    return None
 
 
 def state_path() -> pathlib.Path:
@@ -39,8 +52,9 @@ def load(path: pathlib.Path, corner: str) -> HudSettings:
     if not isinstance(data, dict):
         return HudSettings(corner=corner)
     offset = data.get("offset")
+    muted = parse_muted(data.get("muted"))
     if not (
-        isinstance(data.get("muted"), bool)
+        muted is not None
         and isinstance(data.get("corner"), str)
         and isinstance(offset, list)
         and len(offset) == 2
@@ -48,13 +62,17 @@ def load(path: pathlib.Path, corner: str) -> HudSettings:
     ):
         return HudSettings(corner=corner)
     if data["corner"] != corner:
-        return HudSettings(corner=corner, muted=data["muted"])
-    return HudSettings(corner, (offset[0], offset[1]), data["muted"])
+        return HudSettings(corner=corner, muted=muted)
+    return HudSettings(corner, (offset[0], offset[1]), muted)
 
 
 def save(path: pathlib.Path, settings: HudSettings) -> None:
     """Write atomically; a failure is reported, never raised."""
-    data = {"corner": settings.corner, "offset": list(settings.offset), "muted": settings.muted}
+    data = {
+        "corner": settings.corner,
+        "offset": list(settings.offset),
+        "muted": [kind for kind in KINDS if kind in settings.muted],
+    }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")

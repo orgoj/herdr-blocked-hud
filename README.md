@@ -16,12 +16,12 @@ you:
   `done.after_seconds` (default 5 s), grouped by the value of its final
   `STATUS:` line. By default a row leaves once you view the pane; a status
   value set to `sticky` stays until the agent works again. A separate,
-  switchable sound plays.
+  switchable sound plays; a status value can play the blocked sound instead.
 
 Click a row to focus that pane in Herdr and raise its terminal window; `×`
-or a right click dismisses a done row. On the top line, `♪` mutes and unmutes
-all HUD sounds (struck through and grey while muted; the HUD still appears),
-`↻` restarts the
+or a right click dismisses a done row. On the top line, the red `♪` mutes
+and unmutes the blocked sound and the orange `♪` the done sound (each struck
+through and grey while muted; the HUD still appears), `↻` restarts the
 HUD with the same command (so a newly installed version starts) and `×`
 quits it. Drag the HUD with the left mouse button to move it. Position and
 mute are remembered across runs (see [State file](#state-file)). The
@@ -44,10 +44,10 @@ the session name is shown only when more than one session runs.
 
 The HUD puts a dot in the panel: grey when nothing is listed, orange when
 only done rows are listed, red when a pane is blocked; the tooltip gives the
-counts and says when sound is muted. A left click hides a shown HUD or shows
+counts and says which sound is muted. A left click hides a shown HUD or shows
 a hidden one (also with nothing listed, e.g. to move it); the next new
-blocked or done event shows it again. A right click opens a menu with Mute,
-Restart and Quit. Without a session bus or a StatusNotifier panel the HUD
+blocked or done event shows it again. A right click opens a menu with Mute
+blocked sound, Mute done sound, Restart and Quit. Without a session bus or a StatusNotifier panel the HUD
 runs without the icon; it registers when the panel starts later or restarts.
 
 ## Install and run
@@ -67,7 +67,7 @@ checkout does not affect the running HUD). The Python must include Tk; uv's
 managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.14
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.15
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -117,9 +117,9 @@ Unknown keys, wrong types and invalid regexes stop the HUD at startup.
 | `margin_x`, `margin_y` | `24`, `36` | Pixels from that corner |
 | `width` | `320` | Window width in pixels (positive; margins must not be negative) |
 | `done.after_seconds` | `5` | How long an agent stays done before it is listed (positive) |
-| `done.sound_enabled` | `true` | Done sound on/off, independent of the blocked sound |
+| `done.sound_enabled` | `true` | Done sound on/off, independent of the blocked sound (and of statuses set to it) |
 | `done.status_regex` | `'^\s*STATUS:\s*(\S+)'` | Finds the agent's status line; group 1 is the status value |
-| `done.modes` | `{}` | Mode per status value: `"transient"`, `"sticky"` or `"hide"` |
+| `done.modes` | `{}` | Mode per status value: `"transient"`, `"sticky"` or `"hide"`, or a table `{ mode = "...", sound = "blocked" }` (sound `"done"` by default) |
 | `done.default_mode` | `"transient"` | Mode of status values not in `done.modes` |
 | `done.no_status_mode` | `"transient"` | Mode of a reply without a status line, or a failed read |
 | `done.read_lines` | `80` | Rows of pane output read per completion |
@@ -135,6 +135,15 @@ value's mode decides how long the row stays:
 - `sticky`: also after you viewed it, until the agent works again or
   finishes anew; a pane viewed before `done.after_seconds` is still listed.
 - `hide`: never listed.
+
+A new row plays the done sound. A status value written as a table can play
+the blocked sound instead, for replies that need you; the blocked mute then
+silences it:
+
+```toml
+[done.modes]
+NEEDS_USER = { mode = "sticky", sound = "blocked" }
+```
 
 The `×` button or a right click dismisses a done row for that completion.
 

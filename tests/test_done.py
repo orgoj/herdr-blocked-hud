@@ -191,6 +191,35 @@ class DoneViewTests(unittest.TestCase):
         self.assertFalse(again.beep_done)
         self.assertFalse(hud.update(m, ()).visible)
 
+    def test_status_sound_blocked_beeps_like_a_blocked_pane(self):
+        hud = HudState()
+        m = model(agent("a"), agent("b"))
+        a, b = m.sessions[0].agents
+        hud.update(m, ())
+        view = hud.update(m, (LongDone(a, 65, "NEEDS_USER", "blocked"),))
+        self.assertTrue(view.beep_blocked)
+        self.assertFalse(view.beep_done)
+        self.assertEqual(view.blocked, ())
+        # Listed again: silent. A new done-sound row only beeps done.
+        view = hud.update(m, (LongDone(a, 66, "NEEDS_USER", "blocked"),
+                              LongDone(b, 65, "DONE", "done")))
+        self.assertFalse(view.beep_blocked)
+        self.assertTrue(view.beep_done)
+
+    def test_tracker_gives_each_row_its_status_sound(self):
+        config = DoneConfig(modes={
+            "NEEDS_USER": {"mode": "sticky", "sound": "blocked"}, "DONE": "transient",
+        })
+        reads = {"a": "STATUS: NEEDS_USER\n", "b": "STATUS: DONE\n", "c": "STATUS: OTHER\n"}
+        now = [0]
+        tracker = DoneTracker(config, lambda agent, lines: reads.get(agent.terminal_id),
+                              lambda: now[0])
+        m = model(agent("a"), agent("b"), agent("c"), agent("d"))
+        tracker.update(m)
+        now[0] = 10
+        got = {d.agent.terminal_id: d.sound for d in tracker.update(m)}
+        self.assertEqual(got, {"a": "blocked", "b": "done", "c": "done", "d": "done"})
+
     def test_sticky_row_first_listed_while_idle_does_not_beep(self):
         hud = HudState()
         m = model(agent("a", status="idle"))
@@ -215,6 +244,18 @@ class SoundTests(unittest.TestCase):
         self.assertEqual(sound_for(View(beep_blocked=True, beep_done=True), on), "b.oga")
         self.assertIsNone(sound_for(View(), on))
         self.assertIsNone(sound_for(View(beep_blocked=True), Config(blocked_sound="")))
+
+    def test_mutes_silence_their_kind_only(self):
+        from herdr_blocked_hud.app import sound_for
+        from herdr_blocked_hud.config import Config
+        from herdr_blocked_hud.logic import View
+
+        on = Config(blocked_sound="b.oga", done_sound="d.oga")
+        both = View(beep_blocked=True, beep_done=True)
+        self.assertEqual(sound_for(both, on, muted=frozenset({"blocked"})), "d.oga")
+        self.assertEqual(sound_for(both, on, muted=frozenset({"done"})), "b.oga")
+        self.assertIsNone(sound_for(both, on, muted=frozenset({"blocked", "done"})))
+        self.assertIsNone(sound_for(View(beep_blocked=True), on, muted=frozenset({"blocked"})))
 
     def test_builtin_default_resolves_per_kind(self):
         from herdr_blocked_hud.app import sound_for

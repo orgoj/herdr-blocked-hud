@@ -51,7 +51,12 @@ class TrayItemTests(unittest.TestCase):
         self.assertEqual(TrayState(done=1).color, ORANGE)
         self.assertEqual(TrayState(blocked=1, done=2).color, RED)
         self.assertEqual(TrayState(2, 1).tooltip, "2 blocked, 1 done")
-        self.assertEqual(TrayState(0, 0, muted=True).tooltip, "0 blocked, 0 done · muted")
+        both = frozenset({"blocked", "done"})
+        self.assertEqual(TrayState(0, 0, muted=both).tooltip, "0 blocked, 0 done · muted")
+        self.assertEqual(TrayState(0, 0, muted=frozenset({"done"})).tooltip,
+                         "0 blocked, 0 done · done muted")
+        self.assertEqual(TrayState(0, 0, muted=frozenset({"blocked"})).tooltip,
+                         "0 blocked, 0 done · blocked muted")
 
     def test_pixmap_is_argb32_big_endian(self):
         width, height, data = pixmap(22, RED)
@@ -174,7 +179,7 @@ class PrivateBusTests(unittest.TestCase):
         service = self.registration(watcher)
         self.assertEqual(service, item.service)
 
-        item.set_state(TrayState(blocked=2, done=1, muted=True))
+        item.set_state(TrayState(blocked=2, done=1, muted=frozenset({"blocked", "done"})))
         output = self.gdbus(service, "org.freedesktop.DBus.Properties.GetAll",
                             tray.ITEM_INTERFACE)
         self.assertIn("'2 blocked, 1 done · muted'", output)

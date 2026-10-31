@@ -14,6 +14,8 @@ ERROR_POLLS = 3
 
 # What a status value does to its done row; see DoneTracker.
 MODES = ("transient", "sticky", "hide")
+# Which HUD sound a done row plays when it is first listed.
+SOUNDS = ("blocked", "done")
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,8 @@ class LongDone:
     seconds: float
     # Value from the agent's status line; None without one.
     status: str | None = None
+    # Sound played when the row is first listed: "blocked" or "done".
+    sound: str = "done"
 
 
 def agent_key(agent: Agent) -> tuple[str, str]:
@@ -110,8 +114,14 @@ class HudState:
             self._known_blocked = current | kept
 
         # A sticky row first listed after the user viewed the pane does not beep.
-        entered = {done_key(d.agent) for d in long_done if d.agent.status == "done"}
-        beep_done = bool(entered - self._known_done)
+        # A new row plays its status's sound; "blocked" ones sound like a
+        # blocked pane, so the blocked mute silences them.
+        new = {
+            d.sound for d in long_done
+            if d.agent.status == "done" and done_key(d.agent) not in self._known_done
+        }
+        beep = beep or "blocked" in new
+        beep_done = "done" in new
         self._known_done = {done_key(d.agent) for d in long_done}
 
         show_session = len({s.session.name for s in model.sessions}) > 1
@@ -145,9 +155,11 @@ class DoneConfig:
     # Bottom-most line matching this is the agent's status line; its first
     # group is the status value.
     status_regex: str = r"^\s*STATUS:\s*(\S+)"
-    # Mode per status value; other values get default_mode, a reply without
-    # a status line (or a failed read) gets no_status_mode.
-    modes: dict[str, str] = field(default_factory=dict)
+    # Mode per status value, a mode string or a table
+    # `{ mode = "...", sound = "blocked" | "done" }` (sound default "done");
+    # other values get default_mode, a reply without a status line (or a
+    # failed read) gets no_status_mode, both with the done sound.
+    modes: dict[str, str | dict] = field(default_factory=dict)
     default_mode: str = "transient"
     no_status_mode: str = "transient"
     read_lines: int = 80
@@ -157,7 +169,22 @@ class DoneConfig:
         self.status = re.compile(self.status_regex)
         if self.status.groups < 1:
             raise ValueError("status_regex needs a group for the status value")
-        for mode in (*self.modes.values(), self.default_mode, self.no_status_mode):
+        self.mode_of: dict[str, str] = {}
+        self.sound_of: dict[str, str] = {}
+        for status, value in self.modes.items():
+            if isinstance(value, dict):
+                unknown = set(value) - {"mode", "sound"}
+                if unknown:
+                    raise ValueError(f"modes.{status}: unknown key {sorted(unknown)[0]}")
+                if "mode" not in value:
+                    raise ValueError(f"modes.{status}: missing mode")
+                mode, sound = value["mode"], value.get("sound", "done")
+            else:
+                mode, sound = value, "done"
+            if sound not in SOUNDS:
+                raise ValueError(f"sound {sound!r} is not one of {', '.join(SOUNDS)}")
+            self.mode_of[status], self.sound_of[status] = mode, sound
+        for mode in (*self.mode_of.values(), self.default_mode, self.no_status_mode):
             if mode not in MODES:
                 raise ValueError(f"mode {mode!r} is not one of {', '.join(MODES)}")
 
@@ -175,7 +202,12 @@ def status_value(text: str | None, config: DoneConfig) -> str | None:
 def mode_for(status: str | None, config: DoneConfig) -> str:
     if status is None:
         return config.no_status_mode
-    return config.modes.get(status, config.default_mode)
+    return config.mode_of.get(status, config.default_mode)
+
+
+def done_sound_for(status: str | None, config: DoneConfig) -> str:
+    """Which sound, "blocked" or "done", a completion with `status` plays."""
+    return config.sound_of.get(status, "done") if status is not None else "done"
 
 
 class DoneTracker:
@@ -237,7 +269,10 @@ class DoneTracker:
                 continue
             if self.mode(key, agent) == "hide" or key in self.dismissed:
                 continue
-            result.append(LongDone(agent, now - since, self.status[key]))
+            status = self.status[key]
+            result.append(LongDone(
+                agent, now - since, status, done_sound_for(status, self.config)
+            ))
         return tuple(result)
 
     def mode(self, key: tuple[str, str, int | None], agent: Agent) -> str:

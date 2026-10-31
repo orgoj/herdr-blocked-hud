@@ -69,17 +69,17 @@ class HudGuiTests(unittest.TestCase):
         # Top line: quit and restart packed from the right, then the first header.
         self.assertEqual(
             texts,
-            ["×", "↻", "♪", "Blocked", "▶ blocked row", "Done · NEEDS_USER", "▶ row a", "×",
+            ["×", "↻", "Blocked", "▶ blocked row", "Done · NEEDS_USER", "▶ row a", "×",
              "Done", "▶ row b", "×"],
         )
         widgets = [widget for _, widget in self.labels()]
         self.assertLess(widgets[1].winfo_x(), widgets[0].winfo_x())   # ↻ before ×
         self.before = ([], [])
-        self.press(widgets[6], 1, release_at=(-5, 2))     # released outside: nothing
-        self.press(widgets[7], 1)       # × of row a
-        self.press(widgets[9], 3)       # right click on row b
-        self.press(widgets[6], 1)       # left click on row a focuses it
-        self.press(widgets[4], 3)       # right click on a blocked row does nothing
+        self.press(widgets[5], 1, release_at=(-5, 2))     # released outside: nothing
+        self.press(widgets[6], 1)       # × of row a
+        self.press(widgets[8], 3)       # right click on row b
+        self.press(widgets[5], 1)       # left click on row a focuses it
+        self.press(widgets[3], 3)       # right click on a blocked row does nothing
         self.assertEqual(self.dismissed, [a, b])
         self.assertEqual(self.clicked, [a])
         self.assertIsNone(self.hud.exit_action)
@@ -97,33 +97,61 @@ class HudGuiTests(unittest.TestCase):
         self.press(quit_button, 1)
         self.assertEqual(self.hud.exit_action, "quit")
 
-    def test_mute_button_silences_sounds_but_keeps_the_hud(self):
+    def struck(self, kind):
+        button = self.hud.mute_buttons[kind]
+        return button.itemcget("strike", "state") == "normal"
+
+    def test_mute_buttons_silence_their_sound_but_keep_the_hud(self):
         from unittest import mock
 
-        beeping = View(blocked=(Row(agent("a"), "row a"),), beep_blocked=True)
+        from herdr_blocked_hud.app import sound_for
+
+        def beeping(name, **beeps):
+            return View(blocked=(Row(agent(name), f"row {name}"),), **beeps)
+
         played = []
         with mock.patch("herdr_blocked_hud.app.play", played.append):
-            self.hud.show(beeping)
+            self.hud.show(beeping("a", beep_blocked=True))
             self.root.update()
-            self.assertEqual(len(played), 1)
-            mute = dict(self.labels())["♪"]
+            self.assertEqual(played, [sound_for(View(beep_blocked=True), Config())])
+            buttons = self.hud.mute_buttons
+            # Left to right: blocked ♪, done ♪, ↻, ×.
+            order = sorted(self.hud.top.winfo_children(), key=lambda w: w.winfo_x())[-4:]
+            self.assertEqual(order[:2], [buttons["blocked"], buttons["done"]])
+            sizes = {(b.winfo_reqwidth(), b.winfo_reqheight()) for b in buttons.values()}
             self.before = ([], [])
-            self.press(mute, 1)
-            self.assertTrue(self.hud.muted)
-            self.assertIn("overstrike", str(mute.cget("font")))
-            # A new beep while muted: the HUD shows, nothing plays.
-            self.hud.show(View(blocked=(Row(agent("b"), "row b"),), beep_blocked=True))
+            self.press(buttons["blocked"], 1)
+            self.assertEqual(self.hud.muted, {"blocked"})
+            self.assertTrue(self.struck("blocked"))
+            self.assertFalse(self.struck("done"))
+            # A muted button keeps its size.
+            self.assertEqual(
+                {(b.winfo_reqwidth(), b.winfo_reqheight()) for b in buttons.values()}, sizes
+            )
+            self.assertEqual(len(sizes), 1)
+            # Blocked muted: the HUD shows, nothing plays; done still plays.
+            played.clear()
+            self.hud.show(beeping("b", beep_blocked=True))
             self.root.update()
-            self.assertEqual(len(played), 1)
+            self.assertEqual(played, [])
             self.assertEqual(self.root.state(), "normal")
-            # The state survives the re-render; unmuting plays again.
-            mute = dict(self.labels())["♪"]
-            self.assertIn("overstrike", str(mute.cget("font")))
-            self.press(mute, 1)
-            self.assertFalse(self.hud.muted)
-            self.assertNotIn("overstrike", str(mute.cget("font")))
-            self.hud.show(View(blocked=(Row(agent("c"), "row c"),), beep_blocked=True))
-            self.assertEqual(len(played), 2)
+            self.hud.show(beeping("c", beep_blocked=True, beep_done=True))
+            self.assertEqual(played, [sound_for(View(beep_done=True), Config())])
+            # The state survives the re-render; done muted too: silence.
+            self.root.update()
+            self.assertTrue(self.struck("blocked"))
+            self.press(self.hud.mute_buttons["done"], 1)
+            self.assertEqual(self.hud.muted, {"blocked", "done"})
+            played.clear()
+            self.hud.show(beeping("d", beep_blocked=True, beep_done=True))
+            self.assertEqual(played, [])
+            # Unmuting blocked plays it again.
+            self.root.update()
+            self.press(self.hud.mute_buttons["blocked"], 1)
+            self.assertEqual(self.hud.muted, {"done"})
+            self.assertFalse(self.struck("blocked"))
+            self.hud.show(beeping("e", beep_blocked=True))
+            self.assertEqual(played, [sound_for(View(beep_blocked=True), Config())])
 
     def test_mute_covers_the_demo_sounds(self):
         from unittest import mock
@@ -133,16 +161,17 @@ class HudGuiTests(unittest.TestCase):
         scheduled = []
         with mock.patch.object(self.root, "after", lambda ms, f, *a: scheduled.append((f, a))):
             hud = start_demo(self.root, Config())
-        sounds = [(f, a) for f, a in scheduled if f == hud.play]
+        sounds = [(f, a) for f, a in scheduled if f == hud.beep]
         self.assertEqual(len(sounds), 2)
         played = []
-        hud.muted = True
+        hud.muted = {"blocked", "done"}
         with mock.patch("herdr_blocked_hud.app.play", played.append):
             for f, a in sounds:
                 f(*a)
             self.assertEqual(played, [])
-            hud.muted = False
-            sounds[0][0](*sounds[0][1])
+            hud.muted = {"blocked"}
+            for f, a in sounds:
+                f(*a)
             self.assertEqual(len(played), 1)
 
     def test_tray_click_toggles_the_hud_until_the_next_sound_event(self):
@@ -183,16 +212,24 @@ class HudGuiTests(unittest.TestCase):
         self.assertEqual(self.root.state(), "normal")
         menu = self.hud.menu
         labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1)]
-        self.assertEqual(labels, ["Mute", "Restart", "Quit"])
-        menu.invoke(0)
-        self.assertTrue(self.hud.muted)
-        self.assertTrue(self.hud.menu_mute.get())
-        self.assertIn("overstrike", str(self.hud.mute_button.cget("font")))
-        menu.invoke(0)
-        self.assertFalse(self.hud.muted)
+        self.assertEqual(labels, ["Mute blocked sound", "Mute done sound", "Restart", "Quit"])
         menu.invoke(1)
-        self.assertEqual(self.hud.exit_action, "restart")
+        self.assertEqual(self.hud.muted, {"done"})
+        self.assertTrue(self.hud.menu_mute["done"].get())
+        self.assertFalse(self.hud.menu_mute["blocked"].get())
+        self.assertTrue(self.struck("done"))
+        # A button click is reflected in the menu when it opens.
+        self.before = ([], [])
+        self.press(self.hud.mute_buttons["blocked"], 1)
+        self.hud.tray_event(("menu", 50, 50))
+        self.assertTrue(self.hud.menu_mute["blocked"].get())
+        self.hud.menu.unpost()
+        menu.invoke(0)
+        menu.invoke(1)
+        self.assertEqual(self.hud.muted, set())
         menu.invoke(2)
+        self.assertEqual(self.hud.exit_action, "restart")
+        menu.invoke(3)
         self.assertEqual(self.hud.exit_action, "quit")
 
     def test_open_tray_menu_is_not_covered_by_a_refresh(self):
@@ -233,8 +270,10 @@ class HudGuiTests(unittest.TestCase):
         hud = Hud(root, on_click=lambda a: None, config=Config(), tray=fake)
         hud.show(View(blocked=(Row(agent("a"), "a"),),
                       done=(Section("Done", (Row(agent("b"), "b"), Row(agent("c"), "c"))),)))
-        hud.toggle_mute()
-        self.assertEqual(fake.states[-2:], [TrayState(1, 2, False), TrayState(1, 2, True)])
+        hud.toggle_mute("done")
+        self.assertEqual(
+            fake.states[-2:], [TrayState(1, 2, frozenset()), TrayState(1, 2, frozenset({"done"}))]
+        )
 
     def test_position_and_mute_survive_a_restart(self):
         import pathlib
@@ -274,7 +313,7 @@ class HudGuiTests(unittest.TestCase):
         header.event_generate("<B1-Motion>", x=2, y=2, rootx=600, rooty=140)
         header.event_generate("<ButtonRelease-1>", x=2, y=2, rootx=600, rooty=140)
         root.update()
-        hud.toggle_mute()
+        hud.toggle_mute("done")
         root.update_idletasks()
         moved = (root.winfo_x(), root.winfo_y())
         self.assertEqual(moved, (556, 136))
@@ -283,15 +322,21 @@ class HudGuiTests(unittest.TestCase):
         root, hud = run()
         root.update_idletasks()
         self.assertEqual((root.winfo_x(), root.winfo_y()), moved)
-        self.assertTrue(hud.muted)
+        self.assertEqual(hud.muted, {"done"})
+        hud.toggle_mute("blocked")
+        root.destroy()
+
+        root, hud = run()
+        self.assertEqual(hud.muted, {"blocked", "done"})
+        self.assertEqual(hud.menu_mute["blocked"].get(), True)
         root.destroy()
 
         # The demo neither reads nor writes the state file.
         before = state_file.read_bytes()
         demo = start_demo(self.root, Config())
         self.assertIsNone(demo.state_file)
-        self.assertFalse(demo.muted)
-        demo.toggle_mute()
+        self.assertEqual(demo.muted, set())
+        demo.toggle_mute("blocked")
         self.assertEqual(state_file.read_bytes(), before)
 
     def drag(self, widget, start, end):

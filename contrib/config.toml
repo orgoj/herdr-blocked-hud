@@ -24,7 +24,8 @@ width = 320
 [done]
 # List agents that stay done (finished, not yet viewed) this many seconds.
 after_seconds = 5
-# Play done_sound when an agent enters a Done section.
+# Play done_sound when an agent enters a Done section (statuses set to the
+# blocked sound in [done.modes] are not affected).
 sound_enabled = true
 # The bottom-most line matching this regex is the agent's status line; its
 # first group is the status value, and each value gets its own Done section.
@@ -43,3 +44,5 @@ read_lines = 80
 [done.modes]
 # Example: DONE = "transient" with default_mode = "sticky" keeps every
 # other status value listed until the agent works again.
+# A table also picks the sound a new row plays, "done" (default) or
+# "blocked": NEEDS_USER = { mode = "sticky", sound = "blocked" }
