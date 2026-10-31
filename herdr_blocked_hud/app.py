@@ -22,6 +22,8 @@ from .logic import DoneTracker, HudState, LongDone, Row, View
 from .source import Agent, Model, Poller, Session, SessionState, read_agent_tail
 
 DRAIN_MS = 100
+# Pointer travel (pixels) after which a left-button press becomes a drag.
+DRAG_THRESHOLD = 4
 
 BG = "#1e1e2e"
 ROW_BG = "#313244"
@@ -103,6 +105,44 @@ class Hud:
         self.monitor = x11.primary_monitor() or (
             0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
         )
+        # The WM cannot move an override-redirect window, so a left-button
+        # drag anywhere in the HUD moves it. `offset` is the dragged distance
+        # from the configured corner position; it keeps that corner's edges
+        # in place when the height changes.
+        self.offset = (0, 0)
+        self.drag: tuple[int, int, int, int] | None = None
+        self.dragged = False
+        # Every widget carries its toplevel's binding tag, so these see
+        # events on all children, after the widgets' own bindings.
+        root.bind("<ButtonPress-1>", self.drag_start)
+        root.bind("<B1-Motion>", self.drag_move)
+        root.bind("<ButtonRelease-1>", self.drag_end)
+
+    def drag_start(self, event: tk.Event) -> None:
+        self.drag = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
+        self.dragged = False
+
+    def drag_move(self, event: tk.Event) -> None:
+        if self.drag is None:
+            return
+        x0, y0, left0, top0 = self.drag
+        dx, dy = event.x_root - x0, event.y_root - y0
+        if not self.dragged and max(abs(dx), abs(dy)) < DRAG_THRESHOLD:
+            return
+        self.dragged = True
+        left, top = left0 + dx, top0 + dy
+        placed_left, placed_top = place(self.monitor, self.config, self.root.winfo_height())
+        self.offset = (left - placed_left, top - placed_top)
+        self.root.geometry(f"+{left}+{top}")
+
+    def drag_end(self, _event: tk.Event) -> None:
+        # Runs after the widget's release binding, which checks `dragged`.
+        self.drag = None
+        self.dragged = False
+
+    def on_release(self, widget: tk.Widget, button: int, action: Callable[[], None]) -> None:
+        """`on_release`, except that a drag ending on `widget` is no click."""
+        on_release(widget, button, lambda: None if self.dragged else action())
 
     def submit(self, model: Model, long_done: tuple[LongDone, ...] = ()) -> None:
         """Thread-safe: queue a model for the Tk main loop."""
@@ -148,7 +188,7 @@ class Hud:
                 cursor="hand2",
             )
             button.pack(side=tk.RIGHT)
-            on_release(button, 1, lambda action=action: self.exit(action))
+            self.on_release(button, 1, lambda action=action: self.exit(action))
         if view.blocked:
             self.header("Blocked")
             for row in view.blocked:
@@ -170,6 +210,7 @@ class Hud:
         self.root.update_idletasks()
         height = self.frame.winfo_reqheight()
         left, top = place(self.monitor, self.config, height)
+        left, top = left + self.offset[0], top + self.offset[1]
         self.root.geometry(f"{self.config.width}x{height}+{left}+{top}")
 
     def header(self, text: str) -> None:
@@ -203,14 +244,14 @@ class Hud:
         )
         label.bind("<Enter>", lambda _e: label.configure(bg=ROW_ACTIVE_BG, fg=BG))
         label.bind("<Leave>", lambda _e: label.configure(bg=ROW_BG, fg=FG))
-        on_release(label, 1, lambda agent=row.agent: self.on_click(agent))
+        self.on_release(label, 1, lambda agent=row.agent: self.on_click(agent))
         if dismissible:
             # Packed before the label so a long label cannot push it out.
             close = tk.Label(line, text="×", bg=ROW_BG, fg=FG, padx=6, pady=4, cursor="hand2")
             close.pack(side=tk.RIGHT)
             close.bind("<Enter>", lambda _e: close.configure(bg=ROW_ACTIVE_BG, fg=BG))
             close.bind("<Leave>", lambda _e: close.configure(bg=ROW_BG, fg=FG))
-            on_release(close, 1, lambda agent=row.agent: self.on_dismiss(agent))
+            self.on_release(close, 1, lambda agent=row.agent: self.on_dismiss(agent))
             on_release(label, 3, lambda agent=row.agent: self.on_dismiss(agent))
         label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 

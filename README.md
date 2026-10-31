@@ -21,7 +21,8 @@ you:
 Click a row to focus that pane in Herdr and raise its terminal window; `×`
 or a right click dismisses a done row. On the top line, `↻` restarts the
 HUD with the same command (so a newly installed version starts) and `×`
-quits it. The
+quits it. Drag the HUD with the left mouse button to move it; it keeps that
+position until it quits or restarts. The
 window disappears when nothing is listed. A blocked pane stays listed until
 it is no longer blocked, even while it is on screen in Herdr. If Herdr
 cannot be reached for three polls, a grey error row appears.
@@ -42,7 +43,7 @@ not affect the running HUD). The Python must include Tk; uv's managed
 CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.7
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.8
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit

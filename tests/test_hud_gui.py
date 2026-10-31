@@ -97,6 +97,60 @@ class HudGuiTests(unittest.TestCase):
         self.press(quit_button, 1)
         self.assertEqual(self.hud.exit_action, "quit")
 
+    def drag(self, widget, start, end):
+        """Left-button drag from root coordinates `start` to `end` over `widget`."""
+        widget.event_generate("<ButtonPress-1>", x=2, y=2, rootx=start[0], rooty=start[1])
+        widget.event_generate("<B1-Motion>", x=2, y=2, rootx=end[0], rooty=end[1])
+        widget.event_generate("<ButtonRelease-1>", x=2, y=2, rootx=end[0], rooty=end[1])
+        self.root.update()
+
+    def position(self):
+        self.root.update_idletasks()
+        return self.root.winfo_x(), self.root.winfo_y()
+
+    def test_drag_moves_the_hud_and_keeps_the_position(self):
+        a = agent("a")
+        self.hud.monitor = (0, 0, 1000, 800)
+        self.hud.render(View(blocked=(Row(a, "row a"),)))
+        self.root.deiconify()
+        self.root.update()
+        self.assertTrue(self.root.overrideredirect())
+        # Default corner: top-right, margins 24/36, width 320.
+        self.assertEqual(self.position(), (1000 - 320 - 24, 36))
+        texts = dict(self.labels())
+        self.before = ([], [])
+        # A drag from the header moves the window.
+        self.drag(texts["Blocked"], (700, 40), (600, 140))
+        self.assertEqual(self.position(), (556, 136))
+        # A drag starting on a row moves it too, without focusing the agent.
+        self.drag(texts["▶ row a"], (600, 160), (590, 170))
+        self.assertEqual(self.position(), (546, 146))
+        # A short jitter is still a click, and the window stays put.
+        self.drag(texts["▶ row a"], (600, 160), (602, 161))
+        self.assertEqual(self.position(), (546, 146))
+        self.assertEqual(self.clicked, [a])
+        # A refresh with another height keeps the dragged position.
+        self.hud.render(View(blocked=(Row(a, "row a"), Row(agent("b"), "row b"))))
+        self.root.update()
+        self.assertEqual(self.position(), (546, 146))
+
+    def test_dragged_bottom_corner_keeps_its_bottom_edge(self):
+        import dataclasses
+
+        self.hud.config = dataclasses.replace(Config(), corner="bottom-left")
+        self.hud.monitor = (0, 0, 1000, 800)
+        self.hud.render(View(blocked=(Row(agent("a"), "row a"),)))
+        self.root.deiconify()
+        self.root.update()
+        self.drag(dict(self.labels())["Blocked"], (100, 700), (150, 650))
+        x, y = self.position()
+        bottom = y + self.root.winfo_height()
+        self.hud.render(View(blocked=(Row(agent("a"), "row a"), Row(agent("b"), "row b"))))
+        self.root.update()
+        x2, y2 = self.position()
+        self.assertEqual((x2, y2 + self.root.winfo_height()), (x, bottom))
+        self.assertLess(y2, y)
+
 
 if __name__ == "__main__":
     unittest.main()

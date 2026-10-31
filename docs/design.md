@@ -193,7 +193,11 @@ Limits:
   not hide it. Chosen over a managed window because it needs no WM hints and
   cannot take focus.
 - Position: top-right of the primary monitor (`xrandr --listmonitors`),
-  configurable (TASK-5).
+  configurable (TASK-5). Openbox cannot move an override-redirect window, so
+  a left-button drag inside the HUD moves it (TASK-16); the drag offset from
+  the configured corner is kept in memory for the process lifetime, so the
+  corner's edges stay put when the height changes. A press that moves less
+  than `DRAG_THRESHOLD` pixels stays a click.
 - Clicks reach the rows without focusing the HUD (rows are labels with
   button bindings).
 
