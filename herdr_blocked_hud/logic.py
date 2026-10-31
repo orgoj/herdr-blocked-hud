@@ -56,7 +56,10 @@ class LongDone:
 @dataclass(frozen=True)
 class Item:
     """One line of the HUD. `key` names the widget that shows it: a line
-    keeps its widget while its key stays, and only its text is updated."""
+    keeps its widget while its key stays, and only its text is updated.
+    Keys: a row by its pane and dismissibility, a header by its place among
+    the headers (("header",), ("header", 1), ...), the one error line by
+    ("error",); a changed title or error message is a text change."""
 
     key: tuple
     text: str
@@ -77,18 +80,18 @@ def layout(view: View) -> tuple[Item, ...]:
         items.append(Item(unique, text, agent))
 
     if not view.visible:
-        add(("header", "Nothing waiting"), "Nothing waiting")
+        add(("header",), "Nothing waiting")
     if view.blocked:
-        add(("header", "Blocked"), "Blocked")
+        add(("header",), "Blocked")
         for row in view.blocked:
             add(("row", agent_key(row.agent), False), f"▶ {row.text}", row.agent)
     for section in view.done:
-        add(("header", section.title), section.title)
+        add(("header",), section.title)
         for row in section.rows:
             add(("row", agent_key(row.agent), True), f"▶ {row.text}", row.agent)
     if view.error:
         text = f"herdr unreachable: {view.error}"
-        add(("error", text), text)
+        add(("error",), text)
     return tuple(items)
 
 

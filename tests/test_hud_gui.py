@@ -281,6 +281,24 @@ class HudGuiTests(unittest.TestCase):
         self.assertFalse(line.winfo_exists())
         self.assertNotIn(("row", ("default", "a"), True), self.hud.agents)
 
+    def test_changed_error_and_section_title_keep_their_widgets(self):
+        a, b = agent("a"), agent("b")
+
+        def view(title, error):
+            return View(blocked=(Row(a, "row a"),),
+                        done=(Section(title, (Row(b, "row b"),)),), error=error)
+
+        self.hud.show(view("Done · WAITING", "timeout"))
+        self.root.update()
+        header = self.hud.lines[("header", 1)][1]
+        error = self.hud.lines[("error",)][1]
+        self.hud.show(view("Done · NEEDS_USER", "refused"))
+        self.root.update()
+        self.assertIs(self.hud.lines[("header", 1)][1], header)
+        self.assertIs(self.hud.lines[("error",)][1], error)
+        self.assertEqual(header.cget("text"), "Done · NEEDS_USER")
+        self.assertEqual(error.cget("text"), "herdr unreachable: refused")
+
     def test_resting_pointer_clicks_whatever_row_is_on_top(self):
         # The user keeps the pointer on the top row and clicks it again and
         # again: the HUD changes at once under it, and a click acts on the
