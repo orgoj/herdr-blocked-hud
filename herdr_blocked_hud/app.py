@@ -81,10 +81,21 @@ def place(
 
 
 def clamp(
-    monitor: tuple[int, int, int, int], left: int, top: int, width: int, height: int
+    monitors: list[tuple[int, int, int, int]], left: int, top: int, width: int, height: int
 ) -> tuple[int, int]:
-    """Move a window of `width` x `height` at (left, top) fully onto the monitor."""
-    x, y, monitor_width, monitor_height = monitor
+    """Move a window of `width` x `height` at (left, top) fully onto one monitor:
+    the one holding the window's centre, else the one nearest to it (a saved
+    position on a monitor that is gone lands on an existing one)."""
+    cx, cy = left + width // 2, top + height // 2
+
+    def distance(monitor: tuple[int, int, int, int]) -> int:
+        x, y, w, h = monitor
+        dx = max(x - cx, 0, cx - (x + w - 1))
+        dy = max(y - cy, 0, cy - (y + h - 1))
+        return dx * dx + dy * dy
+
+    # min() keeps the first of equals, so the primary wins ties.
+    x, y, monitor_width, monitor_height = min(monitors, key=distance)
     left = max(x, min(left, x + monitor_width - width))
     top = max(y, min(top, y + monitor_height - height))
     return left, top
@@ -137,9 +148,11 @@ class Hud:
         root.withdraw()
         self.frame = tk.Frame(root, bg=BG, padx=6, pady=6)
         self.frame.pack(fill=tk.BOTH, expand=True)
-        self.monitor = x11.primary_monitor() or (
-            0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
-        )
+        # The corner position is on the primary monitor (listed first); a
+        # dragged HUD may sit on any of them.
+        self.monitors = x11.monitors() or [
+            (0, 0, root.winfo_screenwidth(), root.winfo_screenheight())
+        ]
         # The WM cannot move an override-redirect window, so a left-button
         # drag anywhere in the HUD moves it. `offset` is the dragged distance
         # from the configured corner position; it keeps that corner's edges
@@ -176,7 +189,7 @@ class Hud:
             return
         self.dragged = True
         left, top = left0 + dx, top0 + dy
-        placed_left, placed_top = place(self.monitor, self.config, self.root.winfo_height())
+        placed_left, placed_top = place(self.monitors[0], self.config, self.root.winfo_height())
         self.offset = (left - placed_left, top - placed_top)
         self.root.geometry(f"+{left}+{top}")
 
@@ -307,9 +320,9 @@ class Hud:
             ).pack(fill=tk.X, pady=2)
         self.root.update_idletasks()
         height = self.frame.winfo_reqheight()
-        left, top = place(self.monitor, self.config, height)
+        left, top = place(self.monitors[0], self.config, height)
         left, top = clamp(
-            self.monitor, left + self.offset[0], top + self.offset[1], self.config.width, height
+            self.monitors, left + self.offset[0], top + self.offset[1], self.config.width, height
         )
         self.root.geometry(f"{self.config.width}x{height}+{left}+{top}")
 

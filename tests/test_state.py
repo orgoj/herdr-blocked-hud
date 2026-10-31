@@ -63,10 +63,28 @@ class StateFileTests(unittest.TestCase):
 
 class ClampTests(unittest.TestCase):
     def test_window_is_kept_on_the_monitor(self):
-        monitor = (100, 0, 1000, 800)
+        monitor = [(100, 0, 1000, 800)]
         self.assertEqual(clamp(monitor, 500, 300, 320, 100), (500, 300))
         self.assertEqual(clamp(monitor, 2000, -50, 320, 100), (100 + 1000 - 320, 0))
         self.assertEqual(clamp(monitor, 0, 900, 320, 100), (100, 700))
+
+    def test_window_stays_on_the_monitor_holding_its_centre(self):
+        # Primary 2560x1440 left, portrait 1080x1920 right of it.
+        monitors = [(0, 0, 2560, 1440), (2560, 0, 1080, 1920)]
+        self.assertEqual(clamp(monitors, 3000, 1600, 320, 100), (3000, 1600))
+        # Overlapping the edge: pulled onto the monitor holding the centre.
+        self.assertEqual(clamp(monitors, 2500, 100, 320, 100), (2560, 100))
+        self.assertEqual(clamp(monitors, 2300, 100, 320, 100), (2560 - 320, 100))
+        # Centre in the gap below the primary: nearer to the taller monitor,
+        # or nearer to the primary's bottom edge.
+        self.assertEqual(clamp(monitors, 2300, 1700, 320, 100), (2560, 1700))
+        self.assertEqual(clamp(monitors, 2000, 1700, 320, 100), (2000, 1440 - 100))
+
+    def test_window_off_every_monitor_goes_to_the_nearest(self):
+        monitors = [(0, 0, 1920, 1080), (1920, 0, 1920, 1080)]
+        self.assertEqual(clamp(monitors, 5000, 50, 320, 100), (3840 - 320, 50))
+        self.assertEqual(clamp(monitors, -900, 50, 320, 100), (0, 50))
+        self.assertEqual(clamp(monitors[:1], 2500, 50, 320, 100), (1920 - 320, 50))
 
 
 if __name__ == "__main__":

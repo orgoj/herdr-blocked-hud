@@ -262,7 +262,7 @@ class HudGuiTests(unittest.TestCase):
 
             self.addCleanup(destroy)
             hud = Hud(root, on_click=lambda a: None, config=Config(), state_file=state_file)
-            hud.monitor = (0, 0, 1000, 800)
+            hud.monitors = [(0, 0, 1000, 800)]
             hud.render(view)
             root.deiconify()
             root.update()
@@ -307,7 +307,7 @@ class HudGuiTests(unittest.TestCase):
 
     def test_drag_moves_the_hud_and_keeps_the_position(self):
         a = agent("a")
-        self.hud.monitor = (0, 0, 1000, 800)
+        self.hud.monitors = [(0, 0, 1000, 800)]
         self.hud.render(View(blocked=(Row(a, "row a"),)))
         self.root.deiconify()
         self.root.update()
@@ -335,7 +335,7 @@ class HudGuiTests(unittest.TestCase):
         import dataclasses
 
         self.hud.config = dataclasses.replace(Config(), corner="bottom-left")
-        self.hud.monitor = (0, 0, 1000, 800)
+        self.hud.monitors = [(0, 0, 1000, 800)]
         self.hud.render(View(blocked=(Row(agent("a"), "row a"),)))
         self.root.deiconify()
         self.root.update()
@@ -347,6 +347,72 @@ class HudGuiTests(unittest.TestCase):
         x2, y2 = self.position()
         self.assertEqual((x2, y2 + self.root.winfo_height()), (x, bottom))
         self.assertLess(y2, y)
+
+    def test_position_on_a_second_monitor_sticks(self):
+        import pathlib
+        import shutil
+        import tempfile
+        import tkinter as tk
+
+        from herdr_blocked_hud.app import Hud
+
+        root_dir = pathlib.Path(__file__).resolve().parent.parent / "tmp"
+        root_dir.mkdir(exist_ok=True)
+        directory = pathlib.Path(tempfile.mkdtemp(dir=root_dir))
+        self.addCleanup(shutil.rmtree, directory)
+        state_file = directory / "state.json"
+        primary, second = (0, 0, 1000, 800), (1000, 0, 1000, 800)
+        one, two = View(blocked=(Row(agent("a"), "row a"),)), View(
+            blocked=(Row(agent("a"), "row a"), Row(agent("b"), "row b"))
+        )
+
+        def run(monitors):
+            root = tk.Tk()
+
+            def destroy():
+                try:
+                    root.destroy()
+                except tk.TclError:
+                    pass
+
+            self.addCleanup(destroy)
+            hud = Hud(root, on_click=lambda a: None, config=Config(), state_file=state_file)
+            hud.monitors = monitors
+            hud.render(one)
+            root.deiconify()
+            root.update()
+            return root, hud
+
+        def position(root):
+            root.update_idletasks()
+            return root.winfo_x(), root.winfo_y()
+
+        root, hud = run([primary, second])
+        self.assertEqual(position(root), (1000 - 320 - 24, 36))
+        header = hud.top.winfo_children()[-1]          # "Blocked", packed last
+        header.event_generate("<ButtonPress-1>", x=2, y=2, rootx=700, rooty=40)
+        header.event_generate("<B1-Motion>", x=2, y=2, rootx=1300, rooty=40)
+        header.event_generate("<ButtonRelease-1>", x=2, y=2, rootx=1300, rooty=40)
+        root.update()
+        self.assertEqual(position(root), (1256, 36))
+        # Refreshes, also with another height, keep it on the second monitor.
+        hud.render(two)
+        root.update()
+        self.assertEqual(position(root), (1256, 36))
+        hud.render(one)
+        root.update()
+        self.assertEqual(position(root), (1256, 36))
+        root.destroy()
+
+        # A restart restores it there.
+        root, hud = run([primary, second])
+        self.assertEqual(position(root), (1256, 36))
+        root.destroy()
+
+        # With the second monitor gone, it lands on the remaining one.
+        root, hud = run([primary])
+        self.assertEqual(position(root), (1000 - 320, 36))
+        root.destroy()
 
 
 if __name__ == "__main__":

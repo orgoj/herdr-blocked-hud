@@ -223,8 +223,12 @@ def activate(window: Window) -> bool:
     return result.returncode == 0
 
 
-def primary_monitor() -> tuple[int, int, int, int] | None:
-    """(x, y, width, height) of the primary monitor from `xrandr --listmonitors`."""
+Monitor = tuple[int, int, int, int]
+
+
+def monitors() -> list[Monitor]:
+    """(x, y, width, height) of every monitor from `xrandr --listmonitors`,
+    the primary one first; empty when xrandr fails."""
     try:
         result = subprocess.run(
             ["xrandr", "--listmonitors"],
@@ -233,13 +237,14 @@ def primary_monitor() -> tuple[int, int, int, int] | None:
             timeout=TOOL_TIMEOUT_S,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return None
-    return parse_primary_monitor(result.stdout) if result.returncode == 0 else None
+        return []
+    return parse_monitors(result.stdout) if result.returncode == 0 else []
 
 
-def parse_primary_monitor(listing: str) -> tuple[int, int, int, int] | None:
+def parse_monitors(listing: str) -> list[Monitor]:
     # ` 0: +*DP-0 2560/698x1440/393+0+0  DP-0`; `*` marks the primary.
-    first = None
+    # Without a primary, the first listed monitor stays first.
+    found: list[Monitor] = []
     for line in listing.splitlines()[1:]:
         fields = line.split()
         if len(fields) < 3:
@@ -251,6 +256,7 @@ def parse_primary_monitor(listing: str) -> tuple[int, int, int, int] | None:
         except ValueError:
             continue
         if fields[1].startswith("+*") or fields[1].startswith("*"):
-            return geometry
-        first = first or geometry
-    return first
+            found.insert(0, geometry)
+        else:
+            found.append(geometry)
+    return found

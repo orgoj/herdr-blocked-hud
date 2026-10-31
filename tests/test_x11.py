@@ -108,17 +108,29 @@ class WindowTests(unittest.TestCase):
 
 
 class MonitorTests(unittest.TestCase):
-    def test_primary_monitor(self):
+    def test_all_monitors_primary_first(self):
+        listing = (
+            "Monitors: 3\n"
+            " 0: +HDMI-0 1080/477x1920/268+2560+0  HDMI-0\n"
+            " 1: +*DP-0 2560/698x1440/393+0+0  DP-0\n"
+            " 2: +DP-1 1920/527x1080/296+3640+0  DP-1\n"
+        )
+        self.assertEqual(
+            x11.parse_monitors(listing),
+            [(0, 0, 2560, 1440), (2560, 0, 1080, 1920), (3640, 0, 1920, 1080)],
+        )
+
+    def test_listed_order_without_primary(self):
         listing = (
             "Monitors: 2\n"
-            " 0: +*DP-0 2560/698x1440/393+0+0  DP-0\n"
-            " 1: +HDMI-0 1080/477x1920/268+2560+0  HDMI-0\n"
+            " 0: +HDMI-0 1920/477x1080/268+100+0  HDMI-0\n"
+            " 1: +DP-0 1920/477x1080/268+2020+0  DP-0\n"
+            " 2: garbage\n"
         )
-        self.assertEqual(x11.parse_primary_monitor(listing), (0, 0, 2560, 1440))
-
-    def test_first_monitor_without_primary(self):
-        listing = "Monitors: 1\n 0: +HDMI-0 1920/477x1080/268+100+0  HDMI-0\n"
-        self.assertEqual(x11.parse_primary_monitor(listing), (100, 0, 1920, 1080))
+        self.assertEqual(
+            x11.parse_monitors(listing), [(100, 0, 1920, 1080), (2020, 0, 1920, 1080)]
+        )
+        self.assertEqual(x11.parse_monitors(""), [])
 
 
 if __name__ == "__main__":

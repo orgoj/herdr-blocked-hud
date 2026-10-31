@@ -199,8 +199,11 @@ Limits:
   height changes. A press that moves less than `DRAG_THRESHOLD` pixels stays
   a click. Offset (with its corner) and mute are saved to
   `$XDG_STATE_HOME/herdr-blocked-hud/state.json` (`state.py`, TASK-19), not
-  to the hand-written config.toml; every render clamps the window onto the
-  monitor.
+  to the hand-written config.toml. Every render clamps the window fully onto
+  the monitor holding its centre, else onto the nearest monitor (all from
+  `xrandr --listmonitors`, TASK-22), so a HUD dragged to another monitor
+  stays there and one saved on a disconnected monitor lands on an existing
+  one.
 - Clicks reach the rows without focusing the HUD (rows are labels with
   button bindings).
 

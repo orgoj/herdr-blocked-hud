@@ -67,7 +67,7 @@ checkout does not affect the running HUD). The Python must include Tk; uv's
 managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.13
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.14
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -97,7 +97,8 @@ The dragged position and the mute state are saved to
 `~/.local/state/herdr-blocked-hud/state.json` (respects `XDG_STATE_HOME`),
 never to the config file. The position is stored as the distance from the
 configured `corner`; after a `corner` change it is ignored, and the HUD is
-always kept fully on the monitor. Delete the file to reset both. `--demo`
+always kept fully on the monitor it was dragged to (on the nearest one when
+that monitor is gone). Delete the file to reset both. `--demo`
 neither reads nor writes it.
 
 ## Configuration
