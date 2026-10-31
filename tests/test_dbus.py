@@ -67,6 +67,72 @@ class CodecTests(unittest.TestCase):
         self.assertEqual((decoded.type, decoded.serial, decoded.path, decoded.member),
                          (dbus.SIGNAL, 3, "/a", "Sig"))
 
+    def test_invalid_signatures_are_rejected(self):
+        for signature in ("()", "a()", "{sv}", "a{vs}", "a{s}", "a{sss}", "a", "(i", "i)",
+                          "a" * 40 + "i", "(" * 40 + "i" + ")" * 40, "s" * 256):
+            with self.assertRaises(dbus.DBusError, msg=signature):
+                split_signature(signature)
+
+    def header(self, fields, body=b"", body_length=None):
+        writer = Writer()
+        writer.write("yyyyuua(yv)", (ord("l"), dbus.METHOD_CALL, 0, 1,
+                                     len(body) if body_length is None else body_length, 1,
+                                     fields))
+        writer.align(8)
+        return bytes(writer.data) + body
+
+    def test_hostile_messages_raise_dbus_error(self):
+        member = [(1, ("o", "/a")), (3, ("s", "M"))]
+        cases = {
+            # An array of empty structs would make no progress.
+            "empty struct": self.header(member + [(8, ("g", "a()"))], b"\x08\0\0\0" + b"\0" * 8),
+            "variant of two types": self.header(member + [(8, ("g", "v"))], b"\x02ii\0"),
+            "field of the wrong type": self.header([(1, ("s", "/a")), (5, ("s", "x"))]),
+            "body past the end": self.header(member + [(8, ("g", "s"))], b"", body_length=64),
+            "bad utf-8": self.header(member + [(8, ("g", "s"))], b"\x02\0\0\0\xff\xfe\0"),
+            "array past the array": self.header(
+                member + [(8, ("g", "ai"))], b"\x02\0\0\0\x01\0\0\0"),
+        }
+        for name, data in cases.items():
+            with self.assertRaises(dbus.DBusError, msg=name):
+                decode(data)
+        nested = "v"
+        data = b""
+        for _ in range(40):
+            data += b"\x01v\0"
+        with self.assertRaises(dbus.DBusError):
+            Reader(data + b"\x01y\0\x07").read(nested)
+
+    def test_oversized_frame_is_refused_before_buffering(self):
+        frame = self.header([], body_length=dbus.MAX_MESSAGE)
+        with self.assertRaises(dbus.DBusError):
+            message_length(frame)
+
+    def test_connection_skips_a_bad_frame_and_caps_buffers(self):
+        import socket
+
+        ours, theirs = socket.socketpair()
+        self.addCleanup(ours.close)
+        self.addCleanup(theirs.close)
+        connection = dbus.Connection(ours)
+        good = Message(dbus.SIGNAL, serial=2, path="/a", interface="x.y", member="Ok").encode()
+        bad = self.header([(1, ("o", "/a")), (8, ("g", "a()"))], b"\x08\0\0\0" + b"\0" * 8)
+        theirs.sendall(bad + good)
+        self.assertEqual(connection.receive().member, "Ok")
+        # Unrelated messages queued while waiting for a reply are capped.
+        for serial in range(dbus.MAX_PENDING + 10):
+            theirs.sendall(Message(dbus.SIGNAL, serial=serial + 3, path="/a", interface="x.y",
+                                   member=f"S{serial}").encode())
+        theirs.sendall(Message(dbus.METHOD_RETURN, serial=999, reply_serial=1).encode())
+        connection.call_wait("x", "/", "x.y", "Z")
+        self.assertEqual(len(connection.pending), dbus.MAX_PENDING)
+        self.assertEqual(connection.pending[-1].member, f"S{dbus.MAX_PENDING + 9}")
+        # A server that never ends its auth line is cut off.
+        connection.buffer = b""
+        theirs.sendall(b"x" * (dbus.MAX_AUTH_LINE + 10))
+        with self.assertRaises(dbus.DBusError):
+            connection._auth_line()
+
     def test_malformed_input_raises_dbus_error(self):
         with self.assertRaises(dbus.DBusError):
             Reader(b"\x05\0\0\0abc").read("s")

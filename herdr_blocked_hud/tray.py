@@ -28,6 +28,18 @@ INTROSPECTABLE = "org.freedesktop.DBus.Introspectable"
 PEER = "org.freedesktop.DBus.Peer"
 
 GREY, ORANGE, RED = (0x9399B2, 0xFAB387, 0xF38BA8)
+# Clicks waiting for the Tk thread; more are dropped (see TrayItem.post).
+MAX_EVENTS = 4
+
+# Argument signatures the item accepts; other calls get InvalidArgs.
+METHOD_SIGNATURES = {
+    (PROPERTIES, "GetAll"): "s",
+    (PROPERTIES, "Get"): "ss",
+    (ITEM_INTERFACE, "Activate"): "ii",
+    (ITEM_INTERFACE, "SecondaryActivate"): "ii",
+    (ITEM_INTERFACE, "ContextMenu"): "ii",
+    (ITEM_INTERFACE, "Scroll"): "is",
+}
 ICON_SIZES = (16, 22, 32, 48)
 
 INTROSPECTION = f"""<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
@@ -153,7 +165,9 @@ class TrayItem:
 
     def handle(self, connection: dbus.Connection, message: dbus.Message) -> None:
         if message.type == dbus.SIGNAL:
-            if (message.member == "NameOwnerChanged" and message.body
+            # Only the bus itself can send as org.freedesktop.DBus.
+            if (message.sender == dbus.BUS_NAME and message.member == "NameOwnerChanged"
+                    and message.signature == "sss"
                     and message.body[0] == WATCHER and message.body[2]):
                 self.register(connection)
             return
@@ -167,27 +181,39 @@ class TrayItem:
         elif message.path != ITEM_PATH:
             connection.error(message, "org.freedesktop.DBus.Error.UnknownObject",
                              f"no object {message.path}")
+        elif (interface, member) in METHOD_SIGNATURES and \
+                message.signature != METHOD_SIGNATURES[interface, member]:
+            connection.error(message, "org.freedesktop.DBus.Error.InvalidArgs",
+                             f"{member} takes ({METHOD_SIGNATURES[interface, member]})")
         elif interface == PROPERTIES and member == "GetAll":
             connection.reply(message, "a{sv}", (self.properties(),))
         elif interface == PROPERTIES and member == "Get":
-            name = message.body[1] if len(message.body) == 2 else ""
+            name = message.body[1]
             properties = self.properties()
             if name in properties:
                 connection.reply(message, "v", (properties[name],))
             else:
                 connection.error(message, "org.freedesktop.DBus.Error.UnknownProperty",
-                                 f"no property {name}")
-        elif interface in (ITEM_INTERFACE, None) and member in (
+                                 "no such property")
+        elif interface == ITEM_INTERFACE and member in (
             "Activate", "SecondaryActivate", "ContextMenu", "Scroll"
         ):
             connection.reply(message)
             if member == "Activate":
-                self.events.put(("activate",))
-            elif member == "ContextMenu" and len(message.body) == 2:
-                self.events.put(("menu", *message.body))
+                self.post(("activate",))
+            elif member == "ContextMenu":
+                self.post(("menu", *message.body))
         else:
             connection.error(message, "org.freedesktop.DBus.Error.UnknownMethod",
                              f"no method {interface}.{member}")
+
+    def post(self, event: tuple) -> None:
+        """Hand a click to the Tk thread; extra clicks are dropped while
+        the bounded queue is full, so a flood cannot grow memory."""
+        try:
+            self.events.put_nowait(event)
+        except queue.Full:
+            pass
 
     def register(self, connection: dbus.Connection) -> None:
         # No reply needed: a missing watcher is reported by the caller, and a
@@ -214,16 +240,21 @@ class TrayItem:
             print("herdr-blocked-hud: no status-bar tray yet (no StatusNotifierWatcher)",
                   file=sys.stderr)
         while True:
-            self.handle(connection, connection.receive())
+            message = connection.receive()
+            try:
+                self.handle(connection, message)
+            except (dbus.DBusError, struct.error, ValueError, TypeError, IndexError):
+                # A call the item cannot answer must not end the icon.
+                continue
 
 
-def start(events: queue.Queue, address: str | None = None) -> TrayItem:
+def start(address: str | None = None) -> TrayItem:
     """Connect and serve on a daemon thread, so Tk never waits on the bus.
 
-    Without a session bus the thread reports it and ends; the HUD runs on
-    without an icon.
+    Clicks arrive in the item's bounded `events` queue. Without a session bus
+    the thread reports it and ends; the HUD runs on without an icon.
     """
-    item = TrayItem(events, f"org.kde.StatusNotifierItem-{os.getpid()}-1")
+    item = TrayItem(queue.Queue(MAX_EVENTS), f"org.kde.StatusNotifierItem-{os.getpid()}-1")
 
     def run() -> None:
         try:

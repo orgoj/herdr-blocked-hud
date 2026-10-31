@@ -208,7 +208,8 @@ class Hud:
                 break
         if latest is not None:
             self.show(self.state.update(*latest))
-        while True:
+        # A bounded number per tick, so a click flood cannot starve Tk.
+        for _ in range(tray_module.MAX_EVENTS):
             try:
                 event = self.tray_events.get_nowait()
             except queue.Empty:
@@ -502,7 +503,7 @@ def main(argv: list[str] | None = None) -> int:
 
         hud = Hud(
             root, on_click=on_click, config=config, on_dismiss=on_dismiss,
-            state_file=state_module.state_path(), tray=tray_module.start(queue.Queue()),
+            state_file=state_module.state_path(), tray=tray_module.start(),
         )
         poller.start()
         hud.start_draining()

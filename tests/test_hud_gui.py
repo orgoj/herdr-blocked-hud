@@ -170,8 +170,15 @@ class HudGuiTests(unittest.TestCase):
         self.assertIsNone(self.hud.forced)
 
     def test_tray_events_drain_and_menu_acts_like_the_buttons(self):
-        self.hud.tray_events.put(("activate",))
+        from herdr_blocked_hud.tray import MAX_EVENTS
+
+        # An even number of toggles: a flood is drained a few per tick.
+        for _ in range(MAX_EVENTS * 2 + 1):
+            self.hud.tray_events.put(("activate",))
         self.hud.start_draining()
+        self.assertEqual(self.hud.tray_events.qsize(), MAX_EVENTS + 1)
+        while not self.hud.tray_events.empty():
+            self.hud.tray_event(self.hud.tray_events.get_nowait())
         self.root.update()
         self.assertEqual(self.root.state(), "normal")
         menu = self.hud.menu

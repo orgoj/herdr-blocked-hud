@@ -100,13 +100,31 @@ class TrayItemTests(unittest.TestCase):
         self.assertEqual(self.connection.sent, [("signal", "NewToolTip")])
 
     def test_new_watcher_gets_a_registration(self):
-        owner_changed = Message(dbus.SIGNAL, member="NameOwnerChanged", signature="sss",
-                                body=(tray.WATCHER, "", ":1.77"))
-        self.assertEqual(self.handle(owner_changed),
+        def owner_changed(old, new, sender=dbus.BUS_NAME):
+            return Message(dbus.SIGNAL, member="NameOwnerChanged", signature="sss",
+                           sender=sender, body=(tray.WATCHER, old, new))
+
+        self.assertEqual(self.handle(owner_changed("", ":1.77")),
                          [("call", "RegisterStatusNotifierItem", (self.item.service,))])
-        gone = Message(dbus.SIGNAL, member="NameOwnerChanged", signature="sss",
-                       body=(tray.WATCHER, ":1.77", ""))
-        self.assertEqual(self.handle(gone), [])
+        self.assertEqual(self.handle(owner_changed(":1.77", "")), [])
+        # Another client sending the signal straight to the HUD is ignored.
+        self.assertEqual(self.handle(owner_changed("", ":1.78", sender=":1.9")), [])
+
+    def test_wrong_argument_types_are_refused(self):
+        for member, signature, body in (("ContextMenu", "ss", ("a", "b")),
+                                        ("Activate", "", ()),
+                                        ("ContextMenu", "iii", (1, 2, 3))):
+            self.assertEqual(self.handle(call(member, signature=signature, body=body)),
+                             [("error", "org.freedesktop.DBus.Error.InvalidArgs")])
+        self.assertEqual(self.handle(call("Get", tray.PROPERTIES, "s", ("x",))),
+                         [("error", "org.freedesktop.DBus.Error.InvalidArgs")])
+        self.assertTrue(self.events.empty())
+
+    def test_click_flood_is_bounded(self):
+        item = TrayItem(queue.Queue(tray.MAX_EVENTS), "svc")
+        for _ in range(1000):
+            item.handle(self.connection, call("Activate", signature="ii", body=(0, 0)))
+        self.assertEqual(item.events.qsize(), tray.MAX_EVENTS)
 
 
 @unittest.skipUnless(shutil.which("dbus-daemon") and shutil.which("gdbus"),
@@ -151,8 +169,8 @@ class PrivateBusTests(unittest.TestCase):
 
     def test_registers_answers_and_re_registers(self):
         watcher = self.watcher()
-        events = queue.Queue()
-        item = tray.start(events, self.address)
+        item = tray.start(self.address)
+        events = item.events
         service = self.registration(watcher)
         self.assertEqual(service, item.service)
 

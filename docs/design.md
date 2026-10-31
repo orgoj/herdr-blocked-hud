@@ -220,6 +220,13 @@ Limits:
 - A daemon thread owns the connection (connect, register, answer); clicks
   reach the Tk thread through a queue drained with the model queue. The Tk
   thread only sends the small `NewIcon`/`NewToolTip` signals on state change.
+- Any session-bus client can call the item, so input is bounded: strict
+  signature validation (no empty structs, dict entries only in arrays,
+  nesting ≤ 32), frames ≤ 1 MiB, ≤ 64 queued unrelated messages, a 1 KiB
+  auth line; a frame whose content does not parse is skipped. Methods
+  accept only their own argument signatures, `NameOwnerChanged` only from
+  the bus, and clicks go through a 4-slot queue (more are dropped) that the
+  Tk thread drains at most 4 per tick.
 - Tests: codec round trips and byte layout; the item against a private
   `dbus-daemon` with `gdbus` as an independent decoder.
 

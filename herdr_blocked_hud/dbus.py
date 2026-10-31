@@ -34,7 +34,14 @@ FIXED = {"y": "B", "b": "I", "n": "h", "q": "H", "i": "i", "u": "I", "x": "q", "
          "d": "d", "h": "I"}
 ALIGN = {"y": 1, "b": 4, "n": 2, "q": 2, "i": 4, "u": 4, "x": 8, "t": 8, "d": 8, "h": 4,
          "s": 4, "o": 4, "g": 1, "a": 4, "(": 8, "{": 8, "v": 1}
-MAX_MESSAGE = 128 * 1024 * 1024
+# The item exchanges small messages only; anything bigger is refused, which
+# bounds what another session-bus client can make the HUD buffer.
+MAX_MESSAGE = 1024 * 1024
+MAX_PENDING = 64
+MAX_AUTH_LINE = 1024
+MAX_SIGNATURE = 255
+MAX_DEPTH = 32          # nesting of arrays, structs and variants together
+BASIC = set(FIXED) | set("sog")
 
 
 class DBusError(Exception):
@@ -42,26 +49,46 @@ class DBusError(Exception):
 
 
 def split_signature(signature: str) -> list[str]:
-    """Complete types of a signature: "a{sv}is" -> ["a{sv}", "i", "s"]."""
+    """Complete types of a valid signature: "a{sv}is" -> ["a{sv}", "i", "s"].
+
+    Rejects what the D-Bus spec forbids: empty structs, dict entries outside
+    an array or with a non-basic key, unbalanced brackets, too deep nesting.
+    """
+    if len(signature) > MAX_SIGNATURE:
+        raise DBusError("signature too long")
     types, index = [], 0
     while index < len(signature):
-        end = _type_end(signature, index)
+        end = _type_end(signature, index, 0, in_array=False)
         types.append(signature[index:end])
         index = end
     return types
 
 
-def _type_end(signature: str, index: int) -> int:
+def _type_end(signature: str, index: int, depth: int, in_array: bool) -> int:
+    if index >= len(signature):
+        raise DBusError(f"incomplete signature {signature!r}")
+    if depth > MAX_DEPTH:
+        raise DBusError("signature nested too deep")
     char = signature[index]
     if char == "a":
-        return _type_end(signature, index + 1)
-    if char in "({":
-        close = ")" if char == "(" else "}"
+        return _type_end(signature, index + 1, depth + 1, in_array=True)
+    if char == "(":
         index += 1
-        while signature[index] != close:
-            index = _type_end(signature, index)
+        count = 0
+        while index < len(signature) and signature[index] != ")":
+            index = _type_end(signature, index, depth + 1, in_array=False)
+            count += 1
+        if index >= len(signature) or count == 0:
+            raise DBusError(f"bad struct in signature {signature!r}")
         return index + 1
-    if char in FIXED or char in "sogv":
+    if char == "{":
+        if not in_array or index + 1 >= len(signature) or signature[index + 1] not in BASIC:
+            raise DBusError(f"bad dict entry in signature {signature!r}")
+        end = _type_end(signature, index + 2, depth + 1, in_array=False)
+        if end >= len(signature) or signature[end] != "}":
+            raise DBusError(f"bad dict entry in signature {signature!r}")
+        return end + 1
+    if char in BASIC or char == "v":
         return index + 1
     raise DBusError(f"bad signature {signature!r}")
 
@@ -128,10 +155,12 @@ class Reader:
     def align(self, n: int) -> None:
         self.offset += -self.offset % n
 
-    def read(self, signature: str) -> tuple:
-        return tuple(self.value(kind) for kind in split_signature(signature))
+    def read(self, signature: str, depth: int = 0) -> tuple:
+        return tuple(self.value(kind, depth) for kind in split_signature(signature))
 
-    def value(self, kind: str) -> object:
+    def value(self, kind: str, depth: int = 0) -> object:
+        if depth > MAX_DEPTH:
+            raise DBusError("value nested too deep")
         char = kind[0]
         self.align(ALIGN[char])
         if char in FIXED:
@@ -149,12 +178,14 @@ class Reader:
             return self._string(length)
         if char == "v":
             signature = self.value("g")
-            return (signature, self.value(signature))
+            if len(split_signature(signature)) != 1:
+                raise DBusError(f"variant signature {signature!r} is not one type")
+            return (signature, self.value(signature, depth + 1))
         if char == "(":
-            return self.read(kind[1:-1])
+            return self.read(kind[1:-1], depth + 1)
         if char == "{":
             key_type, value_type = split_signature(kind[1:-1])
-            return (self.value(key_type), self.value(value_type))
+            return (self.value(key_type, depth + 1), self.value(value_type, depth + 1))
         (length,) = struct.unpack_from(self.endian + "I", self.data, self.offset)
         self.offset += 4
         element = kind[1:]
@@ -168,7 +199,12 @@ class Reader:
             return value
         items = []
         while self.offset < end:
-            items.append(self.value(element))
+            start = self.offset
+            items.append(self.value(element, depth + 1))
+            if self.offset <= start:
+                raise DBusError("array element consumed no bytes")
+        if self.offset != end:
+            raise DBusError("array element runs past the array")
         return dict(items) if element[0] == "{" else items
 
     def _string(self, length: int) -> str:
@@ -216,6 +252,8 @@ def message_length(data: bytes) -> int | None:
     """Total length of the message at the start of `data`; None if unknown yet."""
     if len(data) < 16:
         return None
+    if data[0:1] not in (b"l", b"B"):
+        raise DBusError("bad endianness byte")
     endian = "<" if data[0:1] == b"l" else ">"
     body_length, _serial, fields_length = struct.unpack_from(endian + "III", data, 4)
     header = 16 + fields_length
@@ -226,16 +264,32 @@ def message_length(data: bytes) -> int | None:
 
 
 def decode(data: bytes) -> Message:
+    """Parse one message; any malformation raises DBusError."""
+    try:
+        return _decode(data)
+    except DBusError:
+        raise
+    except (IndexError, struct.error, UnicodeDecodeError, ValueError, TypeError,
+            KeyError, RecursionError) as err:
+        raise DBusError(f"malformed message: {err!r}") from None
+
+
+def _decode(data: bytes) -> Message:
     if data[0:1] not in (b"l", b"B"):
         raise DBusError("bad endianness byte")
     endian = "<" if data[0:1] == b"l" else ">"
     reader = Reader(data, endian)
     _endian, kind, flags, _version, body_length, serial, fields = reader.read("yyyyuua(yv)")
     message = Message(kind, serial, flags)
-    for code, (_signature, value) in fields:
+    for code, (signature, value) in fields:
         if code in FIELDS:
-            setattr(message, FIELDS[code][0], value)
+            name, expected = FIELDS[code]
+            if signature != expected:
+                raise DBusError(f"header field {name} has type {signature!r}")
+            setattr(message, name, value)
     reader.align(8)
+    if reader.offset + body_length > len(data):
+        raise DBusError("body runs past the message")
     if message.signature:
         message.body = Reader(data[reader.offset:reader.offset + body_length], endian).read(
             message.signature
@@ -310,6 +364,8 @@ class Connection:
 
     def _auth_line(self) -> bytes:
         while b"\r\n" not in self.buffer:
+            if len(self.buffer) > MAX_AUTH_LINE:
+                raise DBusError("authentication line too long")
             chunk = self.sock.recv(4096)
             if not chunk:
                 raise DBusError("bus closed during authentication")
@@ -346,6 +402,8 @@ class Connection:
                     text = message.body[0] if message.body else ""
                     raise DBusError(f"{message.error_name}: {text}")
                 return message
+            if len(self.pending) >= MAX_PENDING:
+                self.pending.pop(0)
             self.pending.append(message)
 
     def receive(self) -> Message:
@@ -354,11 +412,17 @@ class Connection:
         return self._read()
 
     def _read(self) -> Message:
+        """Next well-formed message. A frame whose content does not parse is
+        skipped (its length is still known); a bad frame header or a frame
+        over MAX_MESSAGE ends the connection with DBusError."""
         while True:
             length = message_length(self.buffer)
             if length is not None and len(self.buffer) >= length:
                 data, self.buffer = self.buffer[:length], self.buffer[length:]
-                return decode(data)
+                try:
+                    return decode(data)
+                except DBusError:
+                    continue
             chunk = self.sock.recv(65536)
             if not chunk:
                 raise DBusError("bus connection closed")
