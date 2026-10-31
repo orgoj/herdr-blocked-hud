@@ -145,6 +145,64 @@ class HudGuiTests(unittest.TestCase):
             sounds[0][0](*sounds[0][1])
             self.assertEqual(len(played), 1)
 
+    def test_position_and_mute_survive_a_restart(self):
+        import pathlib
+        import shutil
+        import tempfile
+        import tkinter as tk
+
+        from herdr_blocked_hud.app import Hud, start_demo
+
+        root_dir = pathlib.Path(__file__).resolve().parent.parent / "tmp"
+        root_dir.mkdir(exist_ok=True)
+        directory = pathlib.Path(tempfile.mkdtemp(dir=root_dir))
+        self.addCleanup(shutil.rmtree, directory)
+        state_file = directory / "state.json"
+        view = View(blocked=(Row(agent("a"), "row a"),))
+
+        def run():
+            root = tk.Tk()
+
+            def destroy():
+                try:
+                    root.destroy()
+                except tk.TclError:
+                    pass
+
+            self.addCleanup(destroy)
+            hud = Hud(root, on_click=lambda a: None, config=Config(), state_file=state_file)
+            hud.monitor = (0, 0, 1000, 800)
+            hud.render(view)
+            root.deiconify()
+            root.update()
+            return root, hud
+
+        root, hud = run()
+        header = hud.top.winfo_children()[-1]          # "Blocked", packed last
+        header.event_generate("<ButtonPress-1>", x=2, y=2, rootx=700, rooty=40)
+        header.event_generate("<B1-Motion>", x=2, y=2, rootx=600, rooty=140)
+        header.event_generate("<ButtonRelease-1>", x=2, y=2, rootx=600, rooty=140)
+        root.update()
+        hud.toggle_mute()
+        root.update_idletasks()
+        moved = (root.winfo_x(), root.winfo_y())
+        self.assertEqual(moved, (556, 136))
+        root.destroy()
+
+        root, hud = run()
+        root.update_idletasks()
+        self.assertEqual((root.winfo_x(), root.winfo_y()), moved)
+        self.assertTrue(hud.muted)
+        root.destroy()
+
+        # The demo neither reads nor writes the state file.
+        before = state_file.read_bytes()
+        demo = start_demo(self.root, Config())
+        self.assertIsNone(demo.state_file)
+        self.assertFalse(demo.muted)
+        demo.toggle_mute()
+        self.assertEqual(state_file.read_bytes(), before)
+
     def drag(self, widget, start, end):
         """Left-button drag from root coordinates `start` to `end` over `widget`."""
         widget.event_generate("<ButtonPress-1>", x=2, y=2, rootx=start[0], rooty=start[1])

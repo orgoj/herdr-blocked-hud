@@ -20,11 +20,11 @@ you:
 
 Click a row to focus that pane in Herdr and raise its terminal window; `×`
 or a right click dismisses a done row. On the top line, `♪` mutes and unmutes
-all HUD sounds until the HUD quits or restarts (struck through and grey while
-muted; the HUD still appears), `↻` restarts the
+all HUD sounds (struck through and grey while muted; the HUD still appears),
+`↻` restarts the
 HUD with the same command (so a newly installed version starts) and `×`
-quits it. Drag the HUD with the left mouse button to move it; it keeps that
-position until it quits or restarts. The
+quits it. Drag the HUD with the left mouse button to move it. Position and
+mute are remembered across runs (see [State file](#state-file)). The
 window disappears when nothing is listed. A blocked pane stays listed until
 it is no longer blocked, even while it is on screen in Herdr. If Herdr
 cannot be reached for three polls, a grey error row appears.
@@ -55,7 +55,7 @@ checkout does not affect the running HUD). The Python must include Tk; uv's
 managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.10
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.11
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -78,6 +78,15 @@ Releases: before starting the work, `bin/bump-version X.Y.Z` (sets `version`
 in `pyproject.toml` and the install tag above), so a build run from the
 checkout is never mistaken for the installed release; then do the work, run
 the tests, commit, and tag `vX.Y.Z`.
+
+## State file
+
+The dragged position and the mute state are saved to
+`~/.local/state/herdr-blocked-hud/state.json` (respects `XDG_STATE_HOME`),
+never to the config file. The position is stored as the distance from the
+configured `corner`; after a `corner` change it is ignored, and the HUD is
+always kept fully on the monitor. Delete the file to reset both. `--demo`
+neither reads nor writes it.
 
 ## Configuration
 

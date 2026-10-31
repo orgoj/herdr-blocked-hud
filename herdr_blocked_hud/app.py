@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import pathlib
 import queue
 import signal
 import subprocess
@@ -16,6 +17,7 @@ from typing import Callable
 
 from . import config as config_module
 from . import sounds, x11
+from . import state as state_module
 from .config import Config, ConfigError
 from .focus import focus_agent
 from .logic import DoneTracker, HudState, LongDone, Row, View
@@ -77,6 +79,16 @@ def place(
     return left, top
 
 
+def clamp(
+    monitor: tuple[int, int, int, int], left: int, top: int, width: int, height: int
+) -> tuple[int, int]:
+    """Move a window of `width` x `height` at (left, top) fully onto the monitor."""
+    x, y, monitor_width, monitor_height = monitor
+    left = max(x, min(left, x + monitor_width - width))
+    top = max(y, min(top, y + monitor_height - height))
+    return left, top
+
+
 class Hud:
     def __init__(
         self,
@@ -84,7 +96,9 @@ class Hud:
         on_click: Callable[[Agent], None],
         config: Config,
         on_dismiss: Callable[[Agent], None] = lambda agent: None,
+        state_file: pathlib.Path | None = None,
     ):
+        """`state_file` remembers position and mute across runs; None: no file."""
         self.root = root
         self.on_click = on_click
         self.on_dismiss = on_dismiss
@@ -94,8 +108,14 @@ class Hud:
         self.shown: View | None = None
         # "quit" or "restart" once a control button ended the main loop.
         self.exit_action: str | None = None
-        # The ♪ button silences every HUD sound until the process ends.
-        self.muted = False
+        self.state_file = state_file
+        saved = (
+            state_module.load(state_file, config.corner)
+            if state_file
+            else state_module.HudSettings(config.corner)
+        )
+        # The ♪ button silences every HUD sound.
+        self.muted = saved.muted
 
         # Override-redirect: Openbox neither manages nor focuses the window,
         # it shows on every desktop, and `lift()` keeps it on top.
@@ -111,7 +131,7 @@ class Hud:
         # drag anywhere in the HUD moves it. `offset` is the dragged distance
         # from the configured corner position; it keeps that corner's edges
         # in place when the height changes.
-        self.offset = (0, 0)
+        self.offset = saved.offset
         self.drag: tuple[int, int, int, int] | None = None
         self.dragged = False
         # Every widget carries its toplevel's binding tag, so these see
@@ -139,8 +159,17 @@ class Hud:
 
     def drag_end(self, _event: tk.Event) -> None:
         # Runs after the widget's release binding, which checks `dragged`.
+        if self.dragged:
+            self.save_state()
         self.drag = None
         self.dragged = False
+
+    def save_state(self) -> None:
+        if self.state_file:
+            state_module.save(
+                self.state_file,
+                state_module.HudSettings(self.config.corner, self.offset, self.muted),
+            )
 
     def on_release(self, widget: tk.Widget, button: int, action: Callable[[], None]) -> None:
         """`on_release`, except that a drag ending on `widget` is no click."""
@@ -216,7 +245,9 @@ class Hud:
         self.root.update_idletasks()
         height = self.frame.winfo_reqheight()
         left, top = place(self.monitor, self.config, height)
-        left, top = left + self.offset[0], top + self.offset[1]
+        left, top = clamp(
+            self.monitor, left + self.offset[0], top + self.offset[1], self.config.width, height
+        )
         self.root.geometry(f"{self.config.width}x{height}+{left}+{top}")
 
     def header(self, text: str) -> None:
@@ -238,6 +269,7 @@ class Hud:
     def toggle_mute(self) -> None:
         self.muted = not self.muted
         self.show_mute()
+        self.save_state()
 
     def show_mute(self) -> None:
         """Struck-through grey note while muted, plain note while sound plays."""
@@ -408,7 +440,10 @@ def main(argv: list[str] | None = None) -> int:
             tracker.dismiss(agent)
             poller.poll_now()
 
-        hud = Hud(root, on_click=on_click, config=config, on_dismiss=on_dismiss)
+        hud = Hud(
+            root, on_click=on_click, config=config, on_dismiss=on_dismiss,
+            state_file=state_module.state_path(),
+        )
         poller.start()
         hud.start_draining()
     root.mainloop()
