@@ -1,7 +1,7 @@
 ---
 id: TASK-22
 title: Keep the dragged position on another monitor
-status: In Progress
+status: Done
 assignee:
   - '@hud_dev'
 created_date: '2026-10-31 08:39'
@@ -20,9 +20,9 @@ With several monitors, dragging the HUD to a non-primary monitor does not stick:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A HUD dragged onto a non-primary monitor stays there across refreshes, height changes and restarts
-- [ ] #2 A saved position on a monitor that is no longer connected is clamped onto an existing monitor
-- [ ] #3 Single-monitor behaviour is unchanged
+- [x] #1 A HUD dragged onto a non-primary monitor stays there across refreshes, height changes and restarts
+- [x] #2 A saved position on a monitor that is no longer connected is clamped onto an existing monitor
+- [x] #3 Single-monitor behaviour is unchanged
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -32,3 +32,9 @@ clamp() now takes all monitors (x11.monitors(), primary first) and clamps onto t
 
 Review fix: parse_monitors accepts signed origins (monitor left of/above the primary); GUI test also covers a second monitor with a negative origin. 122 OK.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+clamp() keeps the HUD fully on the monitor holding its centre, else the nearest one, using all monitors from xrandr (signed origins, primary first); place() still uses the primary corner. Verified: ClampTests, MonitorTests, GUI test for a right and a left second monitor (drag, refreshes with height change, restart, monitor removed); single-monitor drag tests unchanged. 122 OK under xvfb; reviewed by agent_review.
+<!-- SECTION:FINAL_SUMMARY:END -->
