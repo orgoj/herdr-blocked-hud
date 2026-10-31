@@ -216,8 +216,8 @@ Limits:
 - Clicks reach the rows without focusing the HUD (rows are labels with
   button bindings).
 - Refresh in place (TASK-28): `logic.layout()` turns a View into lines keyed
-  by what they are (a row by its pane and dismissibility, a header by its place, the one error line). A
-  render keeps the widget of every key that stays and only changes its text,
+  by what they are (a row by its pane and dismissibility, a header by its
+  place, the one error line). A render keeps the widget of every key that stays and only changes its text,
   creates or destroys widgets of lines that come or go, re-packs only when
   the order changes and sets the geometry only when it changes. Destroying
   and re-creating everything on each View change made the HUD flicker and

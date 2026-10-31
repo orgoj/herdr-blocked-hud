@@ -1,11 +1,11 @@
 ---
 id: TASK-28
 title: HUD flickers and loses clicks when it re-renders
-status: In Progress
+status: Done
 assignee:
   - '@hud_dev'
 created_date: '2026-10-31 22:33'
-updated_date: '2026-10-31 22:48'
+updated_date: '2026-10-31 23:06'
 labels: []
 dependencies: []
 type: bug
@@ -28,11 +28,11 @@ Suggested direction: (a) render only on a change of what is displayed (titles, r
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A poll whose View differs only in fields the HUD does not show (beep flags, Agent focused/completion_seq/pane ids) destroys and creates no widget and does not set the window geometry
-- [ ] #2 A change of displayed text only (e.g. a Done row's elapsed minutes) updates the existing label in place: the row widgets stay the same objects, no geometry call
-- [ ] #3 Rows, headers and the error line are created or destroyed only when they appear or disappear; widgets of rows that stay are kept
-- [ ] #4 A row click acts on the agent of the latest poll, also when the row was not re-created since
-- [ ] #5 Changes show at once also while the pointer rests on the HUD (no hold); a click on the row under a resting pointer acts on the row shown there now
+- [x] #1 A poll whose View differs only in fields the HUD does not show (beep flags, Agent focused/completion_seq/pane ids) destroys and creates no widget and does not set the window geometry
+- [x] #2 A change of displayed text only (e.g. a Done row's elapsed minutes) updates the existing label in place: the row widgets stay the same objects, no geometry call
+- [x] #3 Rows, headers and the error line are created or destroyed only when they appear or disappear; widgets of rows that stay are kept
+- [x] #4 A row click acts on the agent of the latest poll, also when the row was not re-created since
+- [x] #5 Changes show at once also while the pointer rests on the HUD (no hold); a click on the row under a resting pointer acts on the row shown there now
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -47,4 +47,12 @@ Suggested direction: (a) render only on a change of what is displayed (titles, r
 User approved (a), (b) and (c) (hold while hovered) on 2026-10-31.
 
 User rejected (c) mid-implementation: the HUD must redraw at once while the pointer rests on it (workflow: pointer stays on the top row, click, type in the terminal). Hold removed; only (a) and (b) implemented.
+
+Review: blocker on text-based header/error keys fixed in 2d57176; re-review OK.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Hud.render now updates keyed lines (logic.layout) in place instead of destroying and re-creating every widget: hidden-field changes create/destroy nothing and set no geometry, text changes (minutes, error message, section title) update the kept label, rows/headers/error are created or destroyed only when they come or go, row handlers use the latest poll's agent, changes show at once under a resting pointer. Verified with LayoutTests and GUI tests (149 OK under xvfb); reviewed by agent_review.
+<!-- SECTION:FINAL_SUMMARY:END -->
