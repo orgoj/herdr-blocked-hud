@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "herdr-blocked-hud"
-version = "0.1.15"
+version = "0.1.16"
 description = "Always-on-top X11 HUD for blocked and long-done Herdr agents"
 readme = "README.md"
 license = "MIT"

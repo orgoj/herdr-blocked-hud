@@ -253,8 +253,12 @@ that stay `done` (finished, not yet seen) longer than a threshold.
 - Threshold `done.after_seconds`, default `5`. The timer starts at the first
   poll that sees the `(terminal_id, completion_seq)` as `done`; a new
   completion restarts it. After a HUD restart, panes already `done` start
-  counting from the HUD start; sticky state is not kept across restarts
-  (decided).
+  counting from the HUD start. The first time a session is readable, the HUD
+  also reads the status line of every `idle` pane that still carries a
+  completion (Herdr keeps `completion_seq` until the agent works again) and
+  lists the sticky ones at once, timed from the HUD start and without a
+  sound. Nothing is stored on disk, so a dismissal before the restart is not
+  remembered (decided).
 - Sound when a row enters a section while its pane is `done`: own switch
   `done.sound_enabled` (default `true`) and file `done.sound`, default a
   quieter sound than blocked. Turning it off leaves the blocked sound
@@ -346,7 +350,8 @@ one local session.
    and blocked and done must sound different.
 3. **Long-done section: yes** — 5 s default, sections per STATUS value with
    a transient/sticky/hide mode each (default transient, also for agents
-   without a status line), sticky state lost on a HUD restart, done sound
+   without a status line), sticky rows read back from Herdr after a HUD
+   restart (nothing stored on disk), done sound
    switchable on its own (section 5).
 4. **Several Herdr windows: raise the first match.**
 5. **Latency: 1 s polling is acceptable**; no plugin wake-up (option C).

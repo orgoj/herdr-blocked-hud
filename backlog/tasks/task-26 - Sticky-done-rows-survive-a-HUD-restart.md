@@ -1,10 +1,11 @@
 ---
 id: TASK-26
 title: Read done status of idle panes at HUD start
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@hud_dev'
 created_date: '2026-10-31 09:16'
-updated_date: '2026-10-31 09:17'
+updated_date: '2026-10-31 09:24'
 labels: []
 dependencies: []
 type: bug

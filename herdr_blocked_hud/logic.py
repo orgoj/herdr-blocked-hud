@@ -217,7 +217,8 @@ class DoneTracker:
     what happens next: `transient` leaves when the pane leaves `done` (the
     user viewed it), `sticky` stays while the pane is `idle` with the same
     completion and leaves when the agent works again, `hide` is never listed.
-    A dismissed completion is not listed again.
+    A dismissed completion is not listed again. At HUD start, idle panes that
+    still carry a completion are read once and listed if sticky.
 
     Runs on the poll thread: `read_tail` does I/O, once per completion.
     `dismiss` is called from the Tk thread.
@@ -237,6 +238,8 @@ class DoneTracker:
         self.dismissed: set[tuple[str, str, int | None]] = set()
         self._lock = threading.Lock()
         self._to_dismiss: set[tuple[str, str, int | None]] = set()
+        # Sessions whose idle panes were read once (see _read_idle_at_start).
+        self._started_sessions: set[str] = set()
 
     def dismiss(self, agent: Agent) -> None:
         """Thread-safe: stop listing this completion; applied on the next update."""
@@ -252,6 +255,7 @@ class DoneTracker:
         panes = {(a.session, a.terminal_id): a for s in model.sessions for a in s.agents}
         for agent in model.agents_with_status("done"):
             self.since.setdefault(done_key(agent), now)
+        self._read_idle_at_start(model, now)
         result = []
         for key, since in list(self.since.items()):
             agent = panes.get(key[:2])
@@ -274,6 +278,26 @@ class DoneTracker:
                 agent, now - since, status, done_sound_for(status, self.config)
             ))
         return tuple(result)
+
+    def _read_idle_at_start(self, model: Model, now: float) -> None:
+        """First time a session is readable: list its viewed sticky completions.
+
+        Herdr keeps an idle pane's completion_seq until the agent works again,
+        so a sticky row listed before a HUD restart comes back; nothing is
+        stored on disk, so a dismissal before the restart is not remembered.
+        """
+        for state in model.sessions:
+            if state.error or state.session.name in self._started_sessions:
+                continue
+            self._started_sessions.add(state.session.name)
+            for agent in state.agents:
+                key = done_key(agent)
+                if agent.status != "idle" or agent.completion_seq is None or key in self.since:
+                    continue
+                if self.mode(key, agent) == "sticky":
+                    self.since[key] = now
+                else:
+                    self.status.pop(key, None)
 
     def mode(self, key: tuple[str, str, int | None], agent: Agent) -> str:
         if key not in self.status:

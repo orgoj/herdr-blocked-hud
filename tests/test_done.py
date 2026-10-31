@@ -160,6 +160,35 @@ class DoneTrackerTests(unittest.TestCase):
         got = self.at(tracker, 60, model(agent("b", session="work"), sessions=both))
         self.assertEqual(got, [("b", 60, None)])
 
+    def test_idle_sticky_completion_is_listed_at_start(self):
+        tracker = self.make(STICKY, reads={"a": REPLY, "b": "STATUS: DONE\n"})
+        m = model(agent("a", status="idle"), agent("b", status="idle"),
+                  agent("c", status="idle", seq=None), agent("d", status="working", seq=None))
+        self.assertEqual(self.at(tracker, 0, m), [("a", 0, "NEEDS_USER")])
+        self.assertEqual(self.at(tracker, 60, m), [("a", 60, "NEEDS_USER")])
+        # Only panes carrying a completion are read, each once.
+        self.assertEqual(sorted(self.reads), [("w1:a", 80), ("w1:b", 80)])
+        self.assertEqual(self.at(tracker, 61, model(agent("a", status="working", seq=None))), [])
+
+    def test_idle_non_sticky_completion_is_not_listed_at_start(self):
+        config = DoneConfig(modes={"DONE": "transient", "QUIET": "hide"},
+                            default_mode="sticky", no_status_mode="transient")
+        tracker = self.make(config, reads={"a": "STATUS: DONE\n", "b": "STATUS: QUIET\n"})
+        m = model(agent("a", status="idle"), agent("b", status="idle"),
+                  agent("c", status="idle"))
+        self.assertEqual(self.at(tracker, 0, m), [])
+        self.assertEqual(self.at(tracker, 10, m), [])
+        self.assertEqual(len(self.reads), 3)
+        self.assertEqual(tracker.status, {})
+
+    def test_start_read_waits_for_a_reachable_session(self):
+        both = (DEFAULT, WORK)
+        tracker = self.make(STICKY, reads={"b": REPLY})
+        idle_b = agent("b", status="idle", session="work")
+        self.assertEqual(self.at(tracker, 0, model(idle_b, sessions=both, failed=("work",))), [])
+        self.assertEqual(self.at(tracker, 1, model(idle_b, sessions=both)),
+                         [("b", 0, "NEEDS_USER")])
+
     def test_reads_once_per_completion(self):
         tracker = self.make(DoneConfig(read_lines=40), reads={"a": REPLY})
         m = model(agent("a"), agent("b"))
@@ -226,6 +255,19 @@ class DoneViewTests(unittest.TestCase):
         hud.update(m, ())
         view = hud.update(m, (LongDone(m.sessions[0].agents[0], 1, "NEEDS_USER"),))
         self.assertTrue(view.visible)
+        self.assertFalse(view.beep_done)
+
+    def test_rows_listed_at_start_play_no_sound(self):
+        config = DoneConfig(modes={"NEEDS_USER": {"mode": "sticky", "sound": "blocked"}},
+                            default_mode="sticky")
+        reads = {"a": "STATUS: NEEDS_USER\n", "b": "STATUS: WAITING\n"}
+        tracker = DoneTracker(config, lambda agent, lines: reads.get(agent.terminal_id),
+                              lambda: 0)
+        hud = HudState()
+        m = model(agent("a", status="idle"), agent("b", status="idle"))
+        view = hud.update(m, tracker.update(m))
+        self.assertEqual([s.title for s in view.done], ["Done · NEEDS_USER", "Done · WAITING"])
+        self.assertFalse(view.beep_blocked)
         self.assertFalse(view.beep_done)
 
 
