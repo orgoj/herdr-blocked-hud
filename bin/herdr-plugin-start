@@ -4,7 +4,9 @@
 # keeps running; the new one exits ("already running" in the log).
 set -eu
 cd "$(dirname "$0")/.."
-log="${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}}/hud.log"
+# Only Herdr's per-plugin state directory: a shared fallback such as /tmp
+# would let another user plant a symlink or FIFO as the log.
+log="${HERDR_PLUGIN_STATE_DIR:?run me from Herdr (HERDR_PLUGIN_STATE_DIR unset)}/hud.log"
 # The HUD calls `herdr`; make the binary that runs this plugin reachable.
 if [ -n "${HERDR_BIN_PATH:-}" ]; then
     PATH="$(dirname "$HERDR_BIN_PATH"):$PATH"

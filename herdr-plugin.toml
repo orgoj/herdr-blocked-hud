@@ -13,5 +13,5 @@ command = ["sh", "bin/herdr-plugin-start"]
 [[actions]]
 id = "start"
 title = "Start Blocked HUD"
-contexts = ["workspace"]
+contexts = ["global"]
 command = ["sh", "bin/herdr-plugin-start"]

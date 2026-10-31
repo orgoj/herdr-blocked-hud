@@ -25,6 +25,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(manifest["platforms"], ["linux"])
         commands = [manifest["startup"][0]["command"], manifest["actions"][0]["command"]]
         self.assertEqual(commands, [["sh", "bin/herdr-plugin-start"]] * 2)
+        self.assertEqual(manifest["actions"][0]["contexts"], ["global"])
 
 
 class LauncherTests(unittest.TestCase):
@@ -60,6 +61,16 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(log[:2], ["argv=-m herdr_blocked_hud", f"cwd={ROOT}"])
         self.assertTrue(log[2].startswith("path=/opt/herdr/bin:"), log[2])
         self.assertEqual(log[3:], [])            # no HERDR_* variable left
+
+    def test_without_state_dir_it_starts_nothing(self):
+        del self.env["HERDR_PLUGIN_STATE_DIR"]
+        result = subprocess.run(
+            ["sh", str(ROOT / "bin" / "herdr-plugin-start")],
+            cwd=self.dir, env=self.env, capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("HERDR_PLUGIN_STATE_DIR unset", result.stderr)
+        self.assertEqual(result.stdout, "")      # the fake python3 never ran
 
     def test_log_is_appended(self):
         for _ in range(2):
