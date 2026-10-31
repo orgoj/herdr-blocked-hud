@@ -1,11 +1,11 @@
 ---
 id: TASK-26
 title: Read done status of idle panes at HUD start
-status: In Progress
+status: Done
 assignee:
   - '@hud_dev'
 created_date: '2026-10-31 09:16'
-updated_date: '2026-10-31 09:24'
+updated_date: '2026-10-31 09:26'
 labels: []
 dependencies: []
 type: bug
@@ -20,8 +20,14 @@ After a HUD restart, an agent whose reply ended with a sticky status (e.g. STATU
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 At HUD start, an idle pane whose last reply has a sticky status is listed in its Done section
-- [ ] #2 At HUD start, an idle pane whose status is transient or hide (or has no status line, with no_status_mode transient) is not listed
-- [ ] #3 Rows listed at startup play no sound
-- [ ] #4 Nothing new is written to disk; docs/design.md describes the startup read
+- [x] #1 At HUD start, an idle pane whose last reply has a sticky status is listed in its Done section
+- [x] #2 At HUD start, an idle pane whose status is transient or hide (or has no status line, with no_status_mode transient) is not listed
+- [x] #3 Rows listed at startup play no sound
+- [x] #4 Nothing new is written to disk; docs/design.md describes the startup read
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+At the first readable poll of each session, DoneTracker reads the status line of idle panes that still carry a completion_seq and lists sticky ones (silent, timed from HUD start); transient/hide/no-status ones are dropped. Nothing stored on disk; docs/design.md updated. Tests in tests/test_done.py; 131 OK under xvfb; reviewed by agent_review.
+<!-- SECTION:FINAL_SUMMARY:END -->
