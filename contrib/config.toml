@@ -14,6 +14,14 @@ wm_class = "herdr.herdr"
 blocked_sound = "builtin"
 done_sound = "builtin"
 
+# When sounds play. "delayed": no sound when a row appears; a reminder once
+# a row with a sound has been listed sound_delay seconds, repeated every
+# sound_repeat seconds (0: once) while such a row stays listed; nothing
+# listed resets it. "immediate": a sound for every new row.
+sound_mode = "delayed"
+sound_delay = 60
+sound_repeat = 300
+
 # Placement on the primary monitor: top-right, top-left, bottom-right,
 # bottom-left; margins in pixels from that corner; window width in pixels.
 corner = "top-right"

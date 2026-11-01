@@ -24,7 +24,7 @@ Běžné systémové desktopové notifikace (toasty přes D-Bus `org.freedesktop
 ## Požadované vlastnosti řešení
 
 - **Zámek v horní vrstvě (Always on Top):** Panel je trvale nad všemi ostatními okny (X11 `_NET_WM_STATE_ABOVE`).
-- **Zvuková signalizace:** Při přechodu kteréhokoli agenta do stavu `blocked` panel pípne (systémový bell nebo `paplay`).
+- **Zvuková signalizace:** Při přechodu kteréhokoli agenta do stavu `blocked` panel pípne (systémový bell nebo `paplay`). Změna (TASK-29): ve výchozím `sound_mode = "delayed"` zvuk nehraje hned, ale jako upomínka po `sound_delay` (60 s), dokud nějaký agent čeká, opakovaná po `sound_repeat` (5 min); viz `docs/design.md`.
 - **Čistě stavové zobrazení:** Zobrazuje pouze aktuálně blokované panely (`workspace · tab · agent`).
 - **Click-to-focus:** Kliknutí na položku:
   1. Zavolá `herdr agent focus <pane_id>` (přepne panel v multiplexeru).

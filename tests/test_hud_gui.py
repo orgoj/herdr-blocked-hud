@@ -117,6 +117,7 @@ class HudGuiTests(unittest.TestCase):
         def beeping(name, **beeps):
             return View(blocked=(Row(agent(name), f"row {name}"),), **beeps)
 
+        self.hud.config = Config(sound_mode="immediate")
         played = []
         with mock.patch("herdr_blocked_hud.app.play", played.append):
             self.hud.show(beeping("a", beep_blocked=True))
@@ -160,6 +161,59 @@ class HudGuiTests(unittest.TestCase):
             self.assertFalse(self.struck("blocked"))
             self.hud.show(beeping("e", beep_blocked=True))
             self.assertEqual(played, [sound_for(View(beep_blocked=True), Config())])
+
+    def test_delayed_mode_reminds_instead_of_beeping(self):
+        import dataclasses
+        from unittest import mock
+
+        from herdr_blocked_hud.app import sound_for
+        from herdr_blocked_hud.logic import DoneConfig
+
+        now = [0.0]
+        self.hud.clock = lambda: now[0]
+        blocked = frozenset({"blocked"})
+        row = View(blocked=(Row(agent("a"), "row a"),), beep_blocked=True, pending=blocked)
+        played = []
+        with mock.patch("herdr_blocked_hud.app.play", played.append):
+            # A new row shows at once but plays nothing.
+            self.hud.show(row)
+            self.root.update()
+            self.assertEqual(self.root.state(), "normal")
+            self.assertEqual(played, [])
+            now[0] = 59
+            self.hud.show(dataclasses.replace(row, beep_blocked=False))
+            self.assertEqual(played, [])
+            # Due after 60 s: one sound; blocked wins over done.
+            now[0] = 60
+            self.hud.show(dataclasses.replace(row, pending=blocked | {"done"}))
+            self.assertEqual(played, [sound_for(View(beep_blocked=True), Config())])
+            now[0] = 359
+            self.hud.show(row)
+            self.assertEqual(len(played), 1)
+            # Blocked muted: only done keeps it running and plays.
+            self.hud.muted = {"blocked"}
+            now[0] = 360
+            self.hud.show(dataclasses.replace(row, pending=blocked | {"done"}))
+            self.assertEqual(played[1:], [sound_for(View(beep_done=True), Config())])
+            # Only muted kinds listed: the reminder resets.
+            now[0] = 400
+            self.hud.show(row)
+            self.hud.muted = set()
+            now[0] = 410
+            self.hud.show(row)      # delay starts again
+            now[0] = 469
+            self.hud.show(row)
+            self.assertEqual(len(played), 2)
+            now[0] = 470
+            self.hud.show(row)
+            self.assertEqual(len(played), 3)
+            # done.sound_enabled = false: done rows alone never remind.
+            self.hud.config = Config(done=DoneConfig(sound_enabled=False))
+            self.hud.show(View())
+            done_only = View(pending=frozenset({"done"}))
+            for now[0] in (500, 600, 10_000):
+                self.hud.show(done_only)
+            self.assertEqual(len(played), 3)
 
     def test_mute_covers_the_demo_sounds(self):
         from unittest import mock

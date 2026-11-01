@@ -288,6 +288,18 @@ that stay `done` (finished, not yet seen) longer than a threshold.
   makes that status play the blocked sound instead (TASK-23): the tracker
   puts the sound on each `LongDone`, and `HudState` raises `beep_blocked`
   for it, so `done.sound_enabled` and the done mute leave it alone.
+- When sounds play (TASK-29): with 10+ agents a beep per new row is constant
+  noise, so the default `sound_mode = "delayed"` makes them reminders. Each
+  `View` carries `pending`, the sound kinds of every listed row (blocked rows,
+  and each done row's `LongDone.sound`), including rows listed at HUD start.
+  `SoundReminder` (pure, in `logic.py`) gets `pending` minus the silent kinds
+  (muted, `done.sound_enabled = false`, a `""` sound) on every poll. When that
+  first becomes non-empty, the delay starts. Once `sound_delay` has passed it
+  returns the kinds, `sound_for` plays one (blocked wins), and the next one
+  comes `sound_repeat` later (0: never). An empty set resets it, so new rows
+  during a cycle play nothing. Visibility stays immediate:
+  `beep_blocked`/`beep_done` still end a tray-forced hide. With
+  `"immediate"` the old per-new-row beep plays.
 - Mute (TASK-23): two canvas `♪` buttons on the top line, red for the
   blocked sound and orange for the done sound, plus matching tray menu
   check items. A mute silences the sound actually played; with blocked

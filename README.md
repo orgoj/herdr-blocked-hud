@@ -12,13 +12,19 @@
 Small always-on-top window for Linux/X11 that lists Herdr agents that need
 you:
 
-- **Blocked**: Herdr detected an approval or question prompt. A sound plays
-  when a pane becomes blocked.
+- **Blocked**: Herdr detected an approval or question prompt.
 - **Done**: the agent finished and you have not looked at it for
   `done.after_seconds` (default 5 s), grouped by the value of its final
   `STATUS:` line. By default a row leaves once you view the pane; a status
-  value set to `sticky` stays until the agent works again. A separate,
-  switchable sound plays; a status value can play the blocked sound instead.
+  value set to `sticky` stays until the agent works again. It has its own
+  switchable sound; a status value can play the blocked sound instead.
+
+Rows show at once; sounds are reminders, so many agents do not beep
+constantly. By default nothing plays when a row appears: once a row with a
+sound has been listed for `sound_delay` (60 s), one sound plays (blocked
+before done), repeated every `sound_repeat` (5 min) while such a row stays
+listed. When none is listed, the timer resets. `sound_mode = "immediate"`
+plays a sound for every new row instead.
 
 ![The HUD in demo mode: two blocked panes and a Done · NEEDS_USER row](docs/demo.png)
 
@@ -73,7 +79,7 @@ checkout does not affect the running HUD). The Python must include Tk; uv's
 managed CPython does.
 
 ```bash
-uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.20
+uv tool install --python 3.14 git+https://github.com/orgoj/herdr-blocked-hud@v0.1.21
 herdr-blocked-hud                 # run; a second instance exits with status 1
 herdr-blocked-hud --demo          # sample rows for 8 s and both sounds (check placement)
 herdr-blocked-hud --check-config  # validate the config file and exit
@@ -142,6 +148,9 @@ Unknown keys, wrong types and invalid regexes stop the HUD at startup.
 | `wm_class` | `"herdr.herdr"` | Exact `wmctrl -lx` class of the Herdr terminal window, used when the process tree finds none and no other session has a client; `""` disables |
 | `blocked_sound` | `"builtin"` | `"builtin"` (the HUD's own urgent two-tone call), a sound file for `paplay`, or `""` to disable |
 | `done_sound` | `"builtin"` | `"builtin"` (the HUD's own soft rising chime), a sound file, or `""` to disable |
+| `sound_mode` | `"delayed"` | `"delayed"`: a reminder after `sound_delay`, repeated every `sound_repeat` while a row with a sound is listed; `"immediate"`: a sound for every new row |
+| `sound_delay` | `60` | Seconds a row with a sound is listed before the first reminder (not negative) |
+| `sound_repeat` | `300` | Seconds between reminders, counted from the first; `0` plays it once (not negative) |
 | `corner` | `"top-right"` | `top-right`, `top-left`, `bottom-right`, `bottom-left` of the primary monitor |
 | `margin_x`, `margin_y` | `24`, `36` | Pixels from that corner |
 | `width` | `320` | Window width in pixels (positive; margins must not be negative); shown within 200 px and the monitor width; an edge drag overrides it |
@@ -165,7 +174,8 @@ value's mode decides how long the row stays:
   finishes anew; a pane viewed before `done.after_seconds` is still listed.
 - `hide`: never listed.
 
-A new row plays the done sound. A status value written as a table can play
+A row has the done sound (a reminder, or a sound when it appears with
+`sound_mode = "immediate"`). A status value written as a table can play
 the blocked sound instead, for replies that need you; the blocked mute then
 silences it:
 

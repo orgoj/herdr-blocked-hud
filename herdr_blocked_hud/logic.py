@@ -37,6 +37,9 @@ class View:
     error: str | None = None
     beep_blocked: bool = False
     beep_done: bool = False
+    # Sound kinds of the listed rows ("blocked", "done"): what a delayed
+    # reminder would play now.
+    pending: frozenset[str] = frozenset()
 
     @property
     def visible(self) -> bool:
@@ -193,7 +196,32 @@ class HudState:
             error=error,
             beep_blocked=beep,
             beep_done=beep_done,
+            pending=frozenset({"blocked"} if rows else ()) | {d.sound for d in long_done},
         )
+
+
+class SoundReminder:
+    """Delayed, repeating sound: `delay` seconds after something sounding is
+    first listed, then every `repeat` seconds (0: once) while it stays
+    listed; nothing listed resets it. New rows in between play nothing."""
+
+    def __init__(self, delay: float, repeat: float):
+        self.delay = delay
+        self.repeat = repeat
+        self._due: float | None = None
+
+    def tick(self, pending: frozenset[str], now: float) -> frozenset[str]:
+        """The kinds to play now (usually none)."""
+        if not pending:
+            self._due = None
+            return frozenset()
+        if self._due is None:
+            self._due = now + self.delay
+        if now < self._due:
+            return frozenset()
+        # Repeat counts from this sound; 0 never comes due again.
+        self._due = now + self.repeat if self.repeat > 0 else float("inf")
+        return pending
 
 
 def done_key(agent: Agent) -> tuple[str, str, int | None]:

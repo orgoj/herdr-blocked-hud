@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from .logic import DoneConfig
 
 CORNERS = ("top-right", "top-left", "bottom-right", "bottom-left")
+SOUND_MODES = ("delayed", "immediate")
 
 
 class ConfigError(Exception):
@@ -30,6 +31,12 @@ class Config:
     # "builtin": the HUD's own sound; otherwise a file for paplay; "" is off.
     blocked_sound: str = "builtin"
     done_sound: str = "builtin"
+    # "delayed": a reminder sound_delay seconds after a sounding row is
+    # listed, repeated every sound_repeat (0: once) while one stays listed;
+    # "immediate": a sound for every new row.
+    sound_mode: str = "delayed"
+    sound_delay: float = 60
+    sound_repeat: float = 300
     corner: str = "top-right"
     margin_x: int = 24
     margin_y: int = 36
@@ -62,6 +69,9 @@ TOP_LEVEL = {
     "wm_class": str,
     "blocked_sound": str,
     "done_sound": str,
+    "sound_mode": str,
+    "sound_delay": (int, float),
+    "sound_repeat": (int, float),
     "corner": str,
     "margin_x": int,
     "margin_y": int,
@@ -91,7 +101,9 @@ def parse(data: dict) -> Config:
         raise ConfigError("poll_interval must be positive")
     if top.get("width", 320) <= 0:
         raise ConfigError("width must be positive")
-    for key in ("margin_x", "margin_y"):
+    if top.get("sound_mode", "delayed") not in SOUND_MODES:
+        raise ConfigError(f"sound_mode must be one of {', '.join(SOUND_MODES)}")
+    for key in ("margin_x", "margin_y", "sound_delay", "sound_repeat"):
         if top.get(key, 0) < 0:
             raise ConfigError(f"{key} must not be negative")
     if done.get("after_seconds", 5) <= 0:

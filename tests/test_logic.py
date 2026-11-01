@@ -119,3 +119,48 @@ class LayoutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PendingTests(unittest.TestCase):
+    def test_pending_names_the_sounds_of_listed_rows(self):
+        from herdr_blocked_hud.logic import LongDone
+
+        hud = HudState()
+        self.assertEqual(hud.update(model()).pending, frozenset())
+        # Panes blocked at start do not beep but are pending.
+        self.assertEqual(hud.update(model(agent("a"))).pending, {"blocked"})
+        done = LongDone(agent("b", status="done"), 10, None, "done")
+        self.assertEqual(hud.update(model(agent("b", status="done")), (done,)).pending, {"done"})
+        needs = LongDone(agent("c", status="idle"), 10, "NEEDS_USER", "blocked")
+        self.assertEqual(hud.update(model(), (needs,)).pending, {"blocked"})
+
+
+class SoundReminderTests(unittest.TestCase):
+    def test_delay_repeat_and_reset(self):
+        from herdr_blocked_hud.logic import SoundReminder
+
+        r = SoundReminder(60, 300)
+        b = frozenset({"blocked"})
+        self.assertEqual(r.tick(frozenset(), 0), frozenset())
+        self.assertEqual(r.tick(b, 10), frozenset())       # listed: delay starts
+        self.assertEqual(r.tick(b | {"done"}, 69), frozenset())  # a new row adds nothing
+        self.assertEqual(r.tick(b | {"done"}, 70), b | {"done"})  # 60 s later
+        self.assertEqual(r.tick(b, 71), frozenset())
+        self.assertEqual(r.tick(b, 369), frozenset())
+        self.assertEqual(r.tick(b, 370), b)                # 300 s after the first
+        self.assertEqual(r.tick(b, 670), b)
+        # Nothing listed resets; the next row waits the full delay again.
+        self.assertEqual(r.tick(frozenset(), 700), frozenset())
+        self.assertEqual(r.tick(b, 701), frozenset())
+        self.assertEqual(r.tick(b, 760), frozenset())
+        self.assertEqual(r.tick(b, 761), b)
+
+    def test_repeat_zero_plays_once(self):
+        from herdr_blocked_hud.logic import SoundReminder
+
+        r = SoundReminder(0, 0)
+        b = frozenset({"blocked"})
+        self.assertEqual(r.tick(b, 0), b)
+        self.assertEqual(r.tick(b, 10_000), frozenset())
+        r.tick(frozenset(), 10_001)
+        self.assertEqual(r.tick(b, 10_002), b)

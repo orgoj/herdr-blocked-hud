@@ -22,7 +22,7 @@ from . import state as state_module
 from . import tray as tray_module
 from .config import Config, ConfigError
 from .focus import focus_agent
-from .logic import DoneTracker, HudState, Item, LongDone, View, layout
+from .logic import DoneTracker, HudState, Item, LongDone, SoundReminder, View, layout
 from .source import Agent, Model, Poller, Session, SessionState, read_agent_tail
 
 DRAIN_MS = 100
@@ -189,6 +189,8 @@ class Hud:
         self.on_dismiss = on_dismiss
         self.config = config
         self.state = HudState(section_order=tuple(config.done.modes))
+        self.reminder = SoundReminder(config.sound_delay, config.sound_repeat)
+        self.clock: Callable[[], float] = time.monotonic
         self.models: queue.Queue[tuple[Model, tuple[LongDone, ...]]] = queue.Queue()
         self.shown: View | None = None
         # "quit" or "restart" once a control button ended the main loop.
@@ -367,7 +369,10 @@ class Hud:
         self.root.after(DRAIN_MS, self.start_draining)
 
     def show(self, view: View) -> None:
-        self.beep(view)
+        if self.config.sound_mode == "immediate":
+            self.beep(view)
+        else:
+            self.remind(view)
         if view.beep_blocked or view.beep_done:
             self.forced = None
         self.apply(view)
@@ -501,6 +506,18 @@ class Hud:
         sound = sound_for(view, self.config, muted=frozenset(self.muted))
         if sound:
             play(sound)
+
+    def remind(self, view: View) -> None:
+        """Delayed mode: a sound only when the reminder comes due. Kinds that
+        would play nothing (muted, switched off) do not keep it running."""
+        silent = set(self.muted)
+        if not self.config.done.sound_enabled or not self.config.done_sound:
+            silent.add("done")
+        if not self.config.blocked_sound:
+            silent.add("blocked")
+        due = self.reminder.tick(view.pending - silent, self.clock())
+        if due:
+            self.beep(View(beep_blocked="blocked" in due, beep_done="done" in due))
 
     def toggle_mute(self, kind: str) -> None:
         self.muted ^= {kind}

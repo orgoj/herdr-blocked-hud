@@ -29,6 +29,17 @@ class LoadTests(unittest.TestCase):
         self.assertTrue(loaded.done.sound_enabled)
         self.assertEqual(loaded.done.modes, {})
         self.assertEqual(loaded.done.default_mode, "transient")
+        self.assertEqual(
+            (loaded.sound_mode, loaded.sound_delay, loaded.sound_repeat), ("delayed", 60, 300)
+        )
+
+    def test_sound_timing_keys(self):
+        loaded = config.load(self.write(
+            'sound_mode = "immediate"\nsound_delay = 0\nsound_repeat = 90.5\n'
+        ))
+        self.assertEqual(
+            (loaded.sound_mode, loaded.sound_delay, loaded.sound_repeat), ("immediate", 0, 90.5)
+        )
 
     def test_example_file_equals_defaults(self):
         self.assertEqual(config.load(EXAMPLE), Config())
@@ -79,6 +90,10 @@ class LoadTests(unittest.TestCase):
             "width = 0\n": "width must be positive",
             "margin_x = -1\n": "margin_x must not be negative",
             "margin_y = -5\n": "margin_y must not be negative",
+            'sound_mode = "later"\n': "sound_mode must be one of",
+            "sound_delay = -1\n": "sound_delay must not be negative",
+            "sound_repeat = -1\n": "sound_repeat must not be negative",
+            'sound_delay = "1m"\n': "sound_delay has the wrong type",
             "[done]\nafter_seconds = 0\n": "after_seconds must be positive",
             "[done]\nafter_seconds = -10\n": "after_seconds must be positive",
             "[done]\nstatus_regex = '('\n": "invalid regex",
